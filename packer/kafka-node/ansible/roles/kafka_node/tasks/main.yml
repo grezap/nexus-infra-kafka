@@ -93,18 +93,15 @@
     set -euo pipefail
     cd /tmp
     tgz="{{ kafka_node_kafka_tgz }}"
-    curl -fsSL "{{ kafka_node_kafka_url }}"        -o "${tgz}"
-    curl -fsSL "{{ kafka_node_kafka_url }}.sha512" -o "${tgz}.sha512"
-    # Apache publishes the .sha512 as "<hash>  <filename>" or "<filename>: <hash>";
-    # normalise to the coreutils-checkable form and verify.
-    if grep -q ':' "${tgz}.sha512"; then
-      awk -F': ' '{gsub(/ /,"",$2); print $2"  "$1}' "${tgz}.sha512" | sha512sum -c -
-    else
-      sha512sum -c "${tgz}.sha512"
-    fi
+    curl -fsSL "{{ kafka_node_kafka_url }}" -o "${tgz}"
+    # Verify against the literal pinned sha512 (kafka_node_kafka_sha512).
+    # NOT parsed from the .sha512 sidecar -- Apache wraps that hash across
+    # indented multi-line continuation lines, which broke the 0.H.1 v1 build
+    # ("no properly formatted checksum lines found").
+    echo "{{ kafka_node_kafka_sha512 }}  ${tgz}" | sha512sum -c -
     mkdir -p "{{ kafka_node_kafka_home }}"
     tar -xzf "${tgz}" -C "{{ kafka_node_kafka_home }}" --strip-components=1
-    rm -f "${tgz}" "${tgz}.sha512"
+    rm -f "${tgz}"
   args:
     creates: "{{ kafka_node_kafka_home }}/bin/kafka-server-start.sh"
 
