@@ -42,11 +42,15 @@ resource "null_resource" "kafka_rest" {
   count = var.enable_kafka_cluster && var.enable_kafka_rest && var.enable_kafka_rest_config && var.enable_ecosystem_tls && length(local.kafka_rest_specs) > 0 ? 1 : 0
 
   triggers = {
-    tls_id        = length(null_resource.kafka_ecosystem_tls) > 0 ? null_resource.kafka_ecosystem_tls[0].id : "disabled"
-    sr_id         = length(null_resource.kafka_schema_registry) > 0 ? null_resource.kafka_schema_registry[0].id : "disabled"
+    # Keyed only on this overlay's OWN inputs (broker bootstrap / the SR URL
+    # list / overlay version). Ordering after the keystore render + the SR
+    # pair is handled by depends_on -- NOT by kafka_ecosystem_tls /
+    # kafka_schema_registry id triggers, which would needlessly re-run this
+    # overlay whenever those upstreams re-run (the role-overlay-kafka-tls.tf
+    # va_ids lesson). sr_urls already changes when the SR node set changes.
     bootstrap     = local.kafka_east_bootstrap
     sr_urls       = local.kafka_sr_urls
-    rest_config_v = "1" # v1 = original. mTLS to brokers (client.ssl.*), HTTPS listener (PEM, client-auth NONE), schema.registry.url -> SR HA pair.
+    rest_config_v = "2" # v2 (0.H.4) = dropped the `tls_id` + `sr_id` id triggers -- they churned this overlay every time a later sub-phase re-ran ecosystem-tls / schema-registry. v1 = mTLS to brokers (client.ssl.*), HTTPS listener (PEM, client-auth NONE), schema.registry.url -> SR HA pair.
 
     destroy_rest_ips = join(",", [for n in local.kafka_rest_specs : n.vmnet11])
     destroy_ssh_user = var.kafka_node_user

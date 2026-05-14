@@ -30,11 +30,16 @@
 
 locals {
   # Enabled ecosystem nodes that need a PKI keystore. 0.H.3 = the
-  # schema-registry pair + the REST proxy; 0.H.4/0.H.5 extend this.
+  # schema-registry pair + the REST proxy; 0.H.4 = the Connect cluster +
+  # the ksqlDB pair; 0.H.5 = mm2.
   kafka_ecosystem_tls_specs = concat(
     var.enable_schema_registry && var.enable_schema_registry_1 ? [{ host = "schema-registry-1", vmnet10 = "192.168.10.91", vmnet11 = "192.168.70.91" }] : [],
     var.enable_schema_registry && var.enable_schema_registry_2 ? [{ host = "schema-registry-2", vmnet10 = "192.168.10.92", vmnet11 = "192.168.70.92" }] : [],
     var.enable_kafka_rest && var.enable_kafka_rest_1 ? [{ host = "kafka-rest-1", vmnet10 = "192.168.10.88", vmnet11 = "192.168.70.88" }] : [],
+    var.enable_kafka_connect && var.enable_kafka_connect_1 ? [{ host = "kafka-connect-1", vmnet10 = "192.168.10.95", vmnet11 = "192.168.70.95" }] : [],
+    var.enable_kafka_connect && var.enable_kafka_connect_2 ? [{ host = "kafka-connect-2", vmnet10 = "192.168.10.96", vmnet11 = "192.168.70.96" }] : [],
+    var.enable_ksqldb && var.enable_ksqldb_1 ? [{ host = "ksqldb-1", vmnet10 = "192.168.10.97", vmnet11 = "192.168.70.97" }] : [],
+    var.enable_ksqldb && var.enable_ksqldb_2 ? [{ host = "ksqldb-2", vmnet10 = "192.168.10.98", vmnet11 = "192.168.70.98" }] : [],
   )
 }
 
@@ -50,7 +55,7 @@ resource "null_resource" "kafka_ecosystem_tls" {
     # 60-template-kafka-tls.hcl. Ordering is via depends_on.
     pki_role_name   = var.vault_pki_kafka_role_name
     nodes           = jsonencode(local.kafka_ecosystem_tls_specs)
-    ecosystem_tls_v = "1" # v1 = original. Per-ecosystem-node PKI keystore/truststore + client-ssl.properties; PKCS#1->PKCS#8 key conversion (same as kafka_tls_v2).
+    ecosystem_tls_v = "3" # v3 (0.H.4) = truststore.p12 built via `keytool -importcert` -- the v2 `openssl pkcs12 -export -nokeys` form produced a cert bag Java loads as EMPTY ("trustAnchors must be non-empty"). v2 = the split script also emits keystore.p12 + truststore.p12 (PKCS#12) -- Kafka Connect's + ksqlDB's REST listeners reject ssl.keystore.type=PEM, unlike Schema Registry / REST Proxy. v1 = PEM keystore/truststore + client-ssl.properties; PKCS#1->PKCS#8 key conversion.
 
     # Frozen for the destroy provisioner.
     destroy_node_ips = join(",", [for n in local.kafka_ecosystem_tls_specs : n.vmnet11])
@@ -123,12 +128,34 @@ openssl pkcs8 -topk8 -nocrypt -in "$KEY" -out "$TMP/key-pkcs8.pem"
 cat "$TMP/key-pkcs8.pem" "$LEAF" "$CA" > "$TMP/keystore.pem"
 cp "$CA" "$TMP/truststore.pem"
 
+# PKCS#12 keystore + truststore alongside the PEM pair. Apache Kafka's
+# Connect RestServer + ksqlDB's KsqlRestConfig reject ssl.keystore.type=PEM
+# (only JKS/PKCS12/BCFKS) -- unlike Confluent rest-utils (Schema Registry /
+# REST Proxy), which accepts PEM. The Kafka-client connections everywhere
+# still use the PEM pair; only the Connect/ksqlDB REST listeners use these
+# .p12 files. openssl for both -- no keytool dependency.
+P12_PASS="__P12_PASS__"
+# Keystore: openssl builds a proper PrivateKeyEntry (key + leaf + CA chain).
+openssl pkcs12 -export -in "$LEAF" -inkey "$TMP/key-pkcs8.pem" -certfile "$CA" \
+  -name kafka-node -passout pass:"$P12_PASS" -out "$TMP/keystore.p12"
+# Truststore: keytool, NOT `openssl pkcs12 -export -nokeys` -- the openssl
+# form produces a cert bag that Java does NOT load as a trustedCertEntry
+# ("trustAnchors parameter must be non-empty"). keytool -importcert writes a
+# proper trustedCertEntry. keytool ships with the Temurin JDK (on PATH via
+# update-alternatives).
+rm -f "$TMP/truststore.p12"
+keytool -importcert -noprompt -alias kafka-ca -file "$CA" \
+  -keystore "$TMP/truststore.p12" -storetype PKCS12 -storepass "$P12_PASS"
+
 install -m 0640 -o root -g kafka "$TMP/keystore.pem"   "$DEST/keystore.pem"
 install -m 0644 -o root -g kafka "$TMP/truststore.pem" "$DEST/truststore.pem"
+install -m 0640 -o root -g kafka "$TMP/keystore.p12"   "$DEST/keystore.p12"
+install -m 0640 -o root -g kafka "$TMP/truststore.p12" "$DEST/truststore.p12"
 install -m 0644 -o root -g root  "$CA"                 /etc/ssl/certs/kafka-ca.pem
 
-echo "[kafka-tls-split] $(date -u +%FT%TZ) bundle split: keystore.pem + truststore.pem (+ /etc/ssl/certs/kafka-ca.pem)"
+echo "[kafka-tls-split] $(date -u +%FT%TZ) bundle split: keystore.{pem,p12} + truststore.{pem,p12} (+ /etc/ssl/certs/kafka-ca.pem)"
 '@
+      $splitScript = $splitScript -replace '__P12_PASS__', '${var.kafka_keystore_password}'
 
       # Client SSL config -- lets the kafka CLI tools (run via sudo on an
       # ecosystem node) talk to the mTLS brokers using this node's keystore.

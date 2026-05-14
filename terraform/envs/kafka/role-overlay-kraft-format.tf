@@ -47,9 +47,14 @@ resource "null_resource" "kafka_kraft_format" {
   count = var.enable_kafka_cluster && var.enable_kraft_format ? 1 : 0
 
   triggers = {
-    config_id = null_resource.kafka_broker_config[0].id
+    # Keyed only on the cluster table + this overlay's version. Deliberately
+    # NOT on null_resource.kafka_broker_config's id -- that id-trigger
+    # cascaded re-runs from the nftables/broker-config chain. `kafka-storage
+    # format --ignore-formatted` is a mode-agnostic no-op on an
+    # already-formatted dir, so re-running is harmless, but the cascade is
+    # still wrong. Ordering is handled by depends_on.
     clusters  = jsonencode(local.kafka_clusters)
-    overlay_v = "1"
+    overlay_v = "2" # v2 (0.H.4) = dropped the `config_id` id-trigger (the nftables->broker-config->kraft-format->broker-start cascade). v1 = original.
   }
 
   depends_on = [null_resource.kafka_broker_config]
@@ -112,9 +117,15 @@ resource "null_resource" "kafka_broker_start_verify" {
   count = var.enable_kafka_cluster && var.enable_kraft_format ? 1 : 0
 
   triggers = {
-    format_id = null_resource.kafka_kraft_format[0].id
+    # Keyed only on the cluster table + this overlay's version. Deliberately
+    # NOT on null_resource.kafka_kraft_format's id -- that id-trigger was the
+    # tail of the nftables->broker-config->kraft-format->broker-start cascade
+    # that re-ran this overlay's PLAINTEXT quorum probe against the (post-
+    # 0.H.2) mTLS brokers (a PLAINTEXT client hitting an SSL listener OOMs
+    # reading the TLS bytes as a message length). Ordering is via depends_on;
+    # the probe below is now mode-aware.
     clusters  = jsonencode(local.kafka_clusters)
-    overlay_v = "1"
+    overlay_v = "2" # v2 (0.H.4) = dropped the `format_id` id-trigger + the quorum/RF=3 probes are now mTLS-aware (detect /etc/nexus-kafka/client-ssl.properties -> probe with --command-config). v1 = original PLAINTEXT-only probe.
   }
 
   depends_on = [null_resource.kafka_kraft_format]
@@ -154,11 +165,29 @@ ${jsonencode(local.kafka_clusters)}
 
         # Wait for the metadata quorum to elect a leader (probe from node 1).
         $probeIp = $c.nodes[0].vmnet11
+
+        # Detect the broker's wire mode. /etc/nexus-kafka/client-ssl.properties
+        # is written ONLY once role-overlay-kafka-tls.tf has flipped the broker
+        # to mTLS, so it is the reliable "is this broker SSL" marker -- robust
+        # to a stale PLAINTEXT server.properties left on disk by a re-run of
+        # role-overlay-broker-config.tf. A PLAINTEXT kafka client hitting an
+        # SSL listener OOMs (it reads the TLS handshake bytes as a Kafka
+        # message-length and tries to allocate that many GB of heap). When the
+        # broker is mTLS the CLI also needs sudo to read the 0640 root:kafka
+        # keystore.
+        $clientCfg = '/etc/nexus-kafka/client-ssl.properties'
+        $tlsOn = ((ssh @sshOpts "$user@$probeIp" "sudo test -f $clientCfg && echo TLS_ON" 2>&1 | Out-String).Trim() -match 'TLS_ON')
+        $cmdCfg  = if ($tlsOn) { "--command-config $clientCfg" } else { "" }
+        $prodCfg = if ($tlsOn) { "--producer.config $clientCfg" } else { "" }
+        $consCfg = if ($tlsOn) { "--consumer.config $clientCfg" } else { "" }
+        $sudoPfx = if ($tlsOn) { "sudo " } else { "" }
+        Write-Host "[broker-start] cluster '$($c.name)': broker wire mode = $(if ($tlsOn) {'mTLS'} else {'PLAINTEXT'})"
+
         Write-Host "[broker-start] cluster '$($c.name)': waiting for KRaft metadata quorum..."
         $deadline = (Get-Date).AddMinutes($timeout)
         $quorumOk = $false
         while ((Get-Date) -lt $deadline) {
-          $status = (ssh @sshOpts "$user@$probeIp" "$kafka/kafka-metadata-quorum.sh --bootstrap-server localhost:9092 describe --status 2>/dev/null" 2>&1 | Out-String)
+          $status = (ssh @sshOpts "$user@$probeIp" "$sudoPfx$kafka/kafka-metadata-quorum.sh --bootstrap-server localhost:9092 $cmdCfg describe --status 2>/dev/null" 2>&1 | Out-String)
           # Healthy: a LeaderId line with a non-negative id + 3 voters.
           if ($status -match 'LeaderId:\s*\d+' -and $status -match 'CurrentVoters:.*\d+.*\d+.*\d+') {
             $quorumOk = $true
@@ -167,7 +196,7 @@ ${jsonencode(local.kafka_clusters)}
           Start-Sleep -Seconds 10
         }
         if (-not $quorumOk) {
-          $diag = (ssh @sshOpts "$user@$probeIp" "$kafka/kafka-metadata-quorum.sh --bootstrap-server localhost:9092 describe --status 2>&1; sudo journalctl -u kafka -n 20 --no-pager" 2>&1 | Out-String)
+          $diag = (ssh @sshOpts "$user@$probeIp" "$sudoPfx$kafka/kafka-metadata-quorum.sh --bootstrap-server localhost:9092 $cmdCfg describe --status 2>&1; sudo journalctl -u kafka -n 20 --no-pager" 2>&1 | Out-String)
           throw "[broker-start] cluster '$($c.name)': KRaft quorum never converged after $timeout min`n$diag"
         }
         Write-Host "[broker-start] cluster '$($c.name)': KRaft quorum has a leader + 3 voters"
@@ -177,9 +206,9 @@ ${jsonencode(local.kafka_clusters)}
         $topic = "nexus-smoke-$($c.name)"
         $rt = @"
 set -e
-$kafka/kafka-topics.sh --bootstrap-server localhost:9092 --create --if-not-exists --topic $topic --partitions 3 --replication-factor 3
-echo '$token' | $kafka/kafka-console-producer.sh --bootstrap-server localhost:9092 --topic $topic
-$kafka/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic $topic --from-beginning --timeout-ms 15000 2>/dev/null
+$sudoPfx$kafka/kafka-topics.sh --bootstrap-server localhost:9092 $cmdCfg --create --if-not-exists --topic $topic --partitions 3 --replication-factor 3
+echo '$token' | $sudoPfx$kafka/kafka-console-producer.sh --bootstrap-server localhost:9092 $prodCfg --topic $topic
+$sudoPfx$kafka/kafka-console-consumer.sh --bootstrap-server localhost:9092 $consCfg --topic $topic --from-beginning --timeout-ms 15000 2>/dev/null
 "@
         $rtOut = (ssh @sshOpts "$user@$probeIp" $rt 2>&1 | Out-String)
         if ($rtOut -notmatch [regex]::Escape($token)) {

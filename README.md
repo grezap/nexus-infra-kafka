@@ -82,22 +82,25 @@ docs/
 
 ## Status
 
-**0.H.3 closed** (2026-05-14) — the first three ecosystem nodes are live:
-the **Schema Registry HA pair** (`schema-registry-1/2`) and the
-**Confluent REST Proxy** (`kafka-rest-1`). Each holds a per-node Vault-PKI
+**0.H.4 closed** (2026-05-14) — the next four ecosystem nodes are live: a
+**Kafka Connect distributed cluster** (`kafka-connect-1/2`, with the
+**Debezium** Postgres + SQL Server connector plugins loaded) and a
+**ksqlDB cluster** (`ksqldb-1/2`). Each holds a per-node Vault-PKI
 keystore, connects to the `kafka-east` brokers over mutual TLS, and serves
-its own HTTPS listener. Verified: an HA schema register→fetch round-trip
-across the pair + a REST produce/consume round-trip. Smoke gate
-`scripts/smoke-0.H.3.ps1` is ALL GREEN (37 checks). Proof:
-[`docs/verification/0.H.3-schema-registry-rest.md`](./docs/verification/0.H.3-schema-registry-rest.md).
-Next: **0.H.4** — Kafka Connect ×2 + Debezium + ksqlDB ×2.
+its own HTTPS listener. **13 of the 15 `03-kafka` tier VMs are now up.**
+Smoke gate `scripts/smoke-0.H.4.ps1` is ALL GREEN (48 checks). Proof:
+[`docs/verification/0.H.4-connect-ksqldb.md`](./docs/verification/0.H.4-connect-ksqldb.md).
+Next: **0.H.5** — MirrorMaker 2 ×2 + the phase exit-gate test.
 
 Earlier:
+- **0.H.3 closed** (2026-05-14) — the Schema Registry HA pair + Confluent
+  REST Proxy;
+  [`docs/verification/0.H.3-schema-registry-rest.md`](./docs/verification/0.H.3-schema-registry-rest.md).
 - **0.H.2 closed** (2026-05-14) — both KRaft clusters flipped to **mutual
-  TLS** (per-node Vault PKI leaf certs, `ssl.client.auth=required`);
+  TLS**;
   [`docs/verification/0.H.2-broker-mtls.md`](./docs/verification/0.H.2-broker-mtls.md).
 - **0.H.1 closed** (2026-05-14) — both 3-node KRaft clusters brought up on
-  the PLAINTEXT VMnet10 backplane;
+  the VMnet10 backplane;
   [`docs/verification/0.H.1-kraft-bringup.md`](./docs/verification/0.H.1-kraft-bringup.md).
 
 ## License

@@ -9,6 +9,70 @@ blueprint — `nexus-platform-plan/MASTER-PLAN.md` line 160.
 
 ## [Unreleased]
 
+## 0.H.4 — Kafka Connect + Debezium + ksqlDB — 2026-05-14
+
+The next four ecosystem nodes are live: a Kafka Connect distributed
+cluster (`kafka-connect-1/2`, with the Debezium Postgres + SQL Server
+connector plugins loaded) and a ksqlDB cluster (`ksqldb-1/2`). 13 of the
+15 `03-kafka` tier VMs are now up. Smoke gate `scripts/smoke-0.H.4.ps1`
+is ALL GREEN (48 `[OK]` / 0 `[FAIL]`). Verification:
+`docs/verification/0.H.4-connect-ksqldb.md`.
+
+### Added
+
+- **4 ecosystem `module.vm` blocks** — `kafka-connect-1/2` (.95/.96) +
+  `ksqldb-1/2` (.97/.98), with enable toggles + MACs matched to the
+  foundation env's dnsmasq reservations.
+- **`role-overlay-connect.tf`** *(new)* — installs the Debezium Postgres +
+  SQL Server connector plugins (`2.7.3.Final`) under `/opt/connect-plugins`,
+  renders `connect-distributed.properties` (mTLS Kafka client repeated
+  under `producer.`/`consumer.`/`admin.` prefixes; KIP-208
+  `listeners.https.ssl.*` PKCS#12 REST listener), sequential 2-worker
+  start, verifies the Debezium classes in `/connector-plugins`.
+- **`role-overlay-ksqldb.tf`** *(new)* — renders `ksqldb-server.properties`
+  (all-PKCS#12 SSL, `ksql.service.id`-based clustering, SR HA pair wired,
+  `ksql.heartbeat.enable=true`, `ksql.udf.enable.security.manager=false`
+  for Java 21), sequential 2-node start, verifies the `/info` cluster
+  agreement + a `SHOW TOPICS;` round-trip.
+- **`role-overlay-ecosystem-tls.tf`** — now also emits a `keytool`-built
+  PKCS#12 `keystore.p12` + `truststore.p12` beside the PEM pair
+  (`ecosystem_tls_v` v3). New var `kafka_keystore_password`.
+- **`nftables-backplane` / `kafka-vault-agents`** extended to the 4 nodes;
+  the security env's policies + AppRoles extended to 13 kafka-node Vault
+  Agents.
+- **`scripts/smoke-0.H.4.ps1`** *(new)* — 8-section, 48-check ecosystem
+  gate; `scripts/kafka.ps1` default phase → `0.H.4`.
+
+### Design
+
+- Connect's REST listener uses PKCS#12 (Apache Kafka's `RestServer`
+  rejects `ssl.keystore.type=PEM`); ksqlDB uses **PKCS#12 everywhere**
+  (its `KsqlRestConfig` rejects PEM, and its bare `ssl.*` is inherited by
+  the embedded Kafka clients). Schema Registry / REST Proxy keep PEM
+  (Confluent `rest-utils` has a PEM helper). The Kafka client connections
+  are mTLS throughout.
+- Connect + ksqlDB self-create their internal/command topics via
+  AdminClient (works with the brokers' `auto.create.topics.enable=false`);
+  the pairs start sequentially to avoid the 2-node create race.
+
+### Fixed
+
+- **id-trigger cascade in the 0.H.1 broker overlays** — `broker_config` /
+  `kraft_format` / `broker_start_verify` chained on each other's resource
+  ids, so bumping the nftables overlay re-ran the whole chain;
+  `broker_config` re-rendered PLAINTEXT `server.properties` over the
+  0.H.2 SSL config and `broker_start_verify`'s PLAINTEXT probe OOM'd
+  against the mTLS brokers. Dropped the id-triggers; `broker_config` now
+  skips any TLS-flipped broker; `broker_start_verify` is wire-mode-aware
+  (`broker_config` v2, `kraft_format` v2, `kafka_tls_v` v4).
+- **Connect/ksqlDB REST listeners + ksqlDB Kafka client need PKCS#12** —
+  see Design. Plus: ksqlDB's UDF SecurityManager disabled for Java 21;
+  `truststore.p12` built with `keytool` (the `openssl -nokeys` form
+  produced an empty trust store); bare `security.protocol=SSL` for
+  ksqlDB's startup AdminClient; ksqlDB cluster verified via the `/info`
+  agreement (not the heartbeat-driven `/clusterStatus`, which only lists
+  peers once a persistent query exists).
+
 ## 0.H.3 — Schema Registry HA pair + REST Proxy — 2026-05-14
 
 The first three ecosystem nodes are live: the Schema Registry HA pair

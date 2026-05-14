@@ -347,3 +347,123 @@ variable "mac_kafka_rest_1_secondary" {
   type    = string
   default = "00:50:56:3F:01:6E"
 }
+
+# ─── Phase 0.H.4 — Kafka Connect distributed cluster + Debezium + ksqlDB ──
+#
+# 4 ecosystem VMs: kafka-connect-1/2 (.95/.96, a 2-worker distributed
+# Connect cluster + Debezium plugins) + ksqldb-1/2 (.97/.98, a ksqlDB
+# cluster sharing one ksql.service.id). Kafka clients of kafka-east; each
+# reuses role-overlay-ecosystem-tls.tf for its Vault-PKI keystore. The
+# per-host AppRoles are owned by nexus-infra-vmware's security env.
+
+variable "enable_kafka_connect" {
+  type        = bool
+  default     = true
+  description = "Gate for the Kafka Connect distributed cluster (kafka-connect-1/2). Default true."
+}
+
+variable "enable_kafka_connect_1" {
+  type    = bool
+  default = true
+}
+variable "enable_kafka_connect_2" {
+  type    = bool
+  default = true
+}
+
+variable "enable_ksqldb" {
+  type        = bool
+  default     = true
+  description = "Gate for the ksqlDB cluster (ksqldb-1/2). Default true."
+}
+
+variable "enable_ksqldb_1" {
+  type    = bool
+  default = true
+}
+variable "enable_ksqldb_2" {
+  type    = bool
+  default = true
+}
+
+variable "enable_kafka_connect_config" {
+  type        = bool
+  default     = true
+  description = "role-overlay-connect.tf -- install the Debezium plugins, render connect-distributed.properties on the worker pair + enable/start connect-distributed.service. Default true."
+}
+
+variable "enable_ksqldb_config" {
+  type        = bool
+  default     = true
+  description = "role-overlay-ksqldb.tf -- render ksqldb-server.properties on the ksqlDB pair + enable/start ksqldb-server.service. Default true."
+}
+
+variable "enable_kafka_connect_1_vault_agent" {
+  type    = bool
+  default = true
+}
+variable "enable_kafka_connect_2_vault_agent" {
+  type    = bool
+  default = true
+}
+variable "enable_ksqldb_1_vault_agent" {
+  type    = bool
+  default = true
+}
+variable "enable_ksqldb_2_vault_agent" {
+  type    = bool
+  default = true
+}
+
+variable "debezium_version" {
+  type        = string
+  default     = "2.7.3.Final"
+  description = "Debezium connector-plugin version installed onto the Kafka Connect workers. 2.7.x is built against Kafka 3.8 (matches the kafka-node template's Apache Kafka 3.8.1). Bumping this re-installs the plugins on the next apply."
+}
+
+variable "kafka_keystore_password" {
+  type    = string
+  default = "NexusKafkaP12!1"
+  # NOT sensitive: the default is already in this committed file, and marking
+  # it sensitive makes terraform suppress ALL local-exec output for every
+  # overlay that references it -- debugging-hostile. The real boundary is the
+  # 0640 root:kafka perms on the .p12 + rendered config files; production
+  # would source this from Vault KV.
+  description = "Password for the PKCS#12 keystore/truststore that role-overlay-ecosystem-tls.tf builds alongside the PEM pair. Needed because Kafka Connect's REST server (Apache Kafka's own Jetty RestServer) and ksqlDB's KsqlRestConfig reject ssl.keystore.type=PEM -- only JKS/PKCS12/BCFKS -- unlike Schema Registry / REST Proxy (Confluent rest-utils, which DOES accept PEM)."
+}
+
+# MACs -- must match nexus-infra-vmware foundation env's dnsmasq dhcp-host
+# reservations: :68/:69 pin kafka-connect-1/2 -> .95/.96, :6A/:6B pin
+# ksqldb-1/2 -> .97/.98.
+variable "mac_kafka_connect_1_primary" {
+  type    = string
+  default = "00:50:56:3F:00:68"
+}
+variable "mac_kafka_connect_1_secondary" {
+  type    = string
+  default = "00:50:56:3F:01:68"
+}
+variable "mac_kafka_connect_2_primary" {
+  type    = string
+  default = "00:50:56:3F:00:69"
+}
+variable "mac_kafka_connect_2_secondary" {
+  type    = string
+  default = "00:50:56:3F:01:69"
+}
+variable "mac_ksqldb_1_primary" {
+  type    = string
+  default = "00:50:56:3F:00:6A"
+}
+variable "mac_ksqldb_1_secondary" {
+  type    = string
+  default = "00:50:56:3F:01:6A"
+}
+variable "mac_ksqldb_2_primary" {
+  type    = string
+  default = "00:50:56:3F:00:6B"
+}
+variable "mac_ksqldb_2_secondary" {
+  type    = string
+  default = "00:50:56:3F:01:6B"
+}

@@ -50,10 +50,15 @@ resource "null_resource" "kafka_schema_registry" {
   count = var.enable_kafka_cluster && var.enable_schema_registry && var.enable_schema_registry_config && var.enable_ecosystem_tls && length(local.kafka_sr_specs) > 0 ? 1 : 0
 
   triggers = {
-    tls_id      = length(null_resource.kafka_ecosystem_tls) > 0 ? null_resource.kafka_ecosystem_tls[0].id : "disabled"
+    # Keyed only on this overlay's OWN inputs (SR node set / broker
+    # bootstrap / overlay version). Ordering after the keystore render is
+    # handled by depends_on -- NOT by a kafka_ecosystem_tls id trigger,
+    # which would needlessly re-run this overlay (= an SR pair restart)
+    # every time the ecosystem-node set grows in a later sub-phase (the
+    # role-overlay-kafka-tls.tf va_ids lesson).
     nodes       = jsonencode(local.kafka_sr_specs)
     bootstrap   = local.kafka_east_bootstrap
-    sr_config_v = "1" # v1 = original. HA pair, mTLS kafkastore, HTTPS REST listener (PEM, client-auth NONE), _schemas pre-created (1 part / RF 3 / compact).
+    sr_config_v = "2" # v2 (0.H.4) = dropped the `tls_id` trigger (kafka_ecosystem_tls id) -- it churned this overlay every time a later sub-phase added ecosystem nodes. v1 = HA pair, mTLS kafkastore, HTTPS REST listener (PEM, client-auth NONE), _schemas pre-created (1 part / RF 3 / compact).
 
     destroy_sr_ips   = join(",", [for n in local.kafka_sr_specs : n.vmnet11])
     destroy_ssh_user = var.kafka_node_user

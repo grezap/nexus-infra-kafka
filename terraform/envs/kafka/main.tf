@@ -196,3 +196,69 @@ module "kafka_rest_1" {
   vnet_secondary = var.vnet_secondary
   mac_secondary  = var.mac_kafka_rest_1_secondary
 }
+
+# ─── Kafka Connect distributed cluster (2) -- 0.H.4 ───────────────────────
+module "kafka_connect_1" {
+  source = "../../modules/vm"
+  count  = var.enable_kafka_cluster && var.enable_kafka_connect && var.enable_kafka_connect_1 ? 1 : 0
+
+  vm_name           = "kafka-connect-1"
+  template_vmx_path = var.template_vmx_path
+  vm_output_dir     = "${var.vm_output_dir_root}/kafka-connect-1"
+  vmrun_path        = var.vmrun_path
+
+  vnet        = var.vnet_primary
+  mac_address = var.mac_kafka_connect_1_primary
+
+  vnet_secondary = var.vnet_secondary
+  mac_secondary  = var.mac_kafka_connect_1_secondary
+}
+
+module "kafka_connect_2" {
+  source = "../../modules/vm"
+  count  = var.enable_kafka_cluster && var.enable_kafka_connect && var.enable_kafka_connect_2 ? 1 : 0
+
+  vm_name           = "kafka-connect-2"
+  template_vmx_path = var.template_vmx_path
+  vm_output_dir     = "${var.vm_output_dir_root}/kafka-connect-2"
+  vmrun_path        = var.vmrun_path
+
+  vnet        = var.vnet_primary
+  mac_address = var.mac_kafka_connect_2_primary
+
+  vnet_secondary = var.vnet_secondary
+  mac_secondary  = var.mac_kafka_connect_2_secondary
+}
+
+# ─── ksqlDB cluster (2) -- 0.H.4 ──────────────────────────────────────────
+module "ksqldb_1" {
+  source = "../../modules/vm"
+  count  = var.enable_kafka_cluster && var.enable_ksqldb && var.enable_ksqldb_1 ? 1 : 0
+
+  vm_name           = "ksqldb-1"
+  template_vmx_path = var.template_vmx_path
+  vm_output_dir     = "${var.vm_output_dir_root}/ksqldb-1"
+  vmrun_path        = var.vmrun_path
+
+  vnet        = var.vnet_primary
+  mac_address = var.mac_ksqldb_1_primary
+
+  vnet_secondary = var.vnet_secondary
+  mac_secondary  = var.mac_ksqldb_1_secondary
+}
+
+module "ksqldb_2" {
+  source = "../../modules/vm"
+  count  = var.enable_kafka_cluster && var.enable_ksqldb && var.enable_ksqldb_2 ? 1 : 0
+
+  vm_name           = "ksqldb-2"
+  template_vmx_path = var.template_vmx_path
+  vm_output_dir     = "${var.vm_output_dir_root}/ksqldb-2"
+  vmrun_path        = var.vmrun_path
+
+  vnet        = var.vnet_primary
+  mac_address = var.mac_ksqldb_2_primary
+
+  vnet_secondary = var.vnet_secondary
+  mac_secondary  = var.mac_ksqldb_2_secondary
+}

@@ -51,6 +51,11 @@ locals {
     "schema-registry-1" = { vm_ip = "192.168.70.91", cluster = "east", enabled = var.enable_schema_registry_1_vault_agent }
     "schema-registry-2" = { vm_ip = "192.168.70.92", cluster = "east", enabled = var.enable_schema_registry_2_vault_agent }
     "kafka-rest-1"      = { vm_ip = "192.168.70.88", cluster = "east", enabled = var.enable_kafka_rest_1_vault_agent }
+    # 0.H.4 ecosystem nodes (Kafka clients of kafka-east):
+    "kafka-connect-1" = { vm_ip = "192.168.70.95", cluster = "east", enabled = var.enable_kafka_connect_1_vault_agent }
+    "kafka-connect-2" = { vm_ip = "192.168.70.96", cluster = "east", enabled = var.enable_kafka_connect_2_vault_agent }
+    "ksqldb-1"        = { vm_ip = "192.168.70.97", cluster = "east", enabled = var.enable_ksqldb_1_vault_agent }
+    "ksqldb-2"        = { vm_ip = "192.168.70.98", cluster = "east", enabled = var.enable_ksqldb_2_vault_agent }
   }
 
   kafka_vault_agent_active = {
@@ -88,6 +93,7 @@ resource "null_resource" "kafka_vault_agent" {
   depends_on = [
     null_resource.kafka_broker_start_verify,
     module.schema_registry_1, module.schema_registry_2, module.kafka_rest_1,
+    module.kafka_connect_1, module.kafka_connect_2, module.ksqldb_1, module.ksqldb_2,
   ]
 
   provisioner "local-exec" {

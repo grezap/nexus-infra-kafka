@@ -62,15 +62,21 @@ resource "null_resource" "kafka_broker_config" {
   count = var.enable_kafka_cluster && var.enable_broker_config ? 1 : 0
 
   triggers = {
-    east_1      = length(module.kafka_east_1) > 0 ? module.kafka_east_1[0].vm_name : "absent"
-    east_2      = length(module.kafka_east_2) > 0 ? module.kafka_east_2[0].vm_name : "absent"
-    east_3      = length(module.kafka_east_3) > 0 ? module.kafka_east_3[0].vm_name : "absent"
-    west_1      = length(module.kafka_west_1) > 0 ? module.kafka_west_1[0].vm_name : "absent"
-    west_2      = length(module.kafka_west_2) > 0 ? module.kafka_west_2[0].vm_name : "absent"
-    west_3      = length(module.kafka_west_3) > 0 ? module.kafka_west_3[0].vm_name : "absent"
-    brokers     = jsonencode(local.kafka_enabled_brokers)
-    nftables_id = length(null_resource.kafka_nftables_backplane) > 0 ? null_resource.kafka_nftables_backplane[0].id : "skipped"
-    overlay_v   = "1"
+    # Keyed only on the broker SET + this overlay's version. Deliberately NOT
+    # on null_resource.kafka_nftables_backplane's id -- that id-trigger made
+    # this overlay re-run every time the nftables overlay re-ran (e.g. when a
+    # later sub-phase extended it to new ecosystem nodes), and a re-run here
+    # re-renders PLAINTEXT server.properties, CLOBBERING the SSL config that
+    # role-overlay-kafka-tls.tf flipped in on 0.H.2. Ordering after nftables
+    # is handled by depends_on. (The role-overlay-kafka-tls.tf va_ids lesson.)
+    east_1    = length(module.kafka_east_1) > 0 ? module.kafka_east_1[0].vm_name : "absent"
+    east_2    = length(module.kafka_east_2) > 0 ? module.kafka_east_2[0].vm_name : "absent"
+    east_3    = length(module.kafka_east_3) > 0 ? module.kafka_east_3[0].vm_name : "absent"
+    west_1    = length(module.kafka_west_1) > 0 ? module.kafka_west_1[0].vm_name : "absent"
+    west_2    = length(module.kafka_west_2) > 0 ? module.kafka_west_2[0].vm_name : "absent"
+    west_3    = length(module.kafka_west_3) > 0 ? module.kafka_west_3[0].vm_name : "absent"
+    brokers   = jsonencode(local.kafka_enabled_brokers)
+    overlay_v = "2" # v2 (0.H.4) = dropped the `nftables_id` id-trigger (it cascaded re-runs that clobbered the post-0.H.2 SSL server.properties) + added the client-ssl.properties skip-guard so a re-run never overwrites a TLS-flipped broker. v1 = original PLAINTEXT render.
   }
 
   depends_on = [null_resource.kafka_nftables_backplane]
@@ -131,6 +137,17 @@ auto.create.topics.enable=false
           Start-Sleep -Seconds 15
         }
         if (-not $ready) { throw "[broker-config] $${ip}: SSH + firstboot marker never ready after $timeout min" }
+
+        # Skip-guard: /etc/nexus-kafka/client-ssl.properties exists ONLY once
+        # role-overlay-kafka-tls.tf has flipped this broker to mTLS. If it's
+        # present, kafka-tls owns server.properties (the SSL variant) -- this
+        # 0.H.1 overlay must NOT clobber it with the PLAINTEXT render. It only
+        # renders on a still-PLAINTEXT broker (cold rebuild, pre-flip).
+        $flipped = (ssh @sshOpts "$user@$ip" "sudo test -f /etc/nexus-kafka/client-ssl.properties && echo TLS_FLIPPED" 2>&1 | Out-String).Trim()
+        if ($flipped -match 'TLS_FLIPPED') {
+          Write-Host "[broker-config] $${ip}: already TLS-flipped -- leaving server.properties to role-overlay-kafka-tls.tf"
+          continue
+        }
 
         $props = (Render-ServerProperties -NodeId $b.node_id -Vmnet10 $b.vmnet10 -Quorum $b.quorum -Cluster $b.cluster) -replace "`r`n", "`n"
         Write-Host "[broker-config] $${ip}: rendering server.properties ($($b.cluster) node $($b.node_id))"

@@ -35,12 +35,16 @@ locals {
     var.enable_kafka_west && var.enable_kafka_west_3 ? "192.168.70.26" : "",
   ])
   # Ecosystem VMnet11 IPs -- the same kafka-node ruleset applies (whole-segment
-  # VMnet10 trust + operator ports). 0.H.3 adds the schema-registry pair + the
-  # REST proxy; 0.H.4/0.H.5 extend this list.
+  # VMnet10 trust + operator ports). 0.H.3 = the schema-registry pair + the
+  # REST proxy; 0.H.4 = the Connect cluster + the ksqlDB pair; 0.H.5 = mm2.
   kafka_ecosystem_ips = compact([
     var.enable_schema_registry && var.enable_schema_registry_1 ? "192.168.70.91" : "",
     var.enable_schema_registry && var.enable_schema_registry_2 ? "192.168.70.92" : "",
     var.enable_kafka_rest && var.enable_kafka_rest_1 ? "192.168.70.88" : "",
+    var.enable_kafka_connect && var.enable_kafka_connect_1 ? "192.168.70.95" : "",
+    var.enable_kafka_connect && var.enable_kafka_connect_2 ? "192.168.70.96" : "",
+    var.enable_ksqldb && var.enable_ksqldb_1 ? "192.168.70.97" : "",
+    var.enable_ksqldb && var.enable_ksqldb_2 ? "192.168.70.98" : "",
   ])
   kafka_node_ips     = concat(local.kafka_broker_ips, local.kafka_ecosystem_ips)
   nftables_conf_path = abspath("${path.module}/../../../packer/kafka-node/files/nftables.conf")
@@ -59,14 +63,19 @@ resource "null_resource" "kafka_nftables_backplane" {
     sr_1              = length(module.schema_registry_1) > 0 ? module.schema_registry_1[0].vm_name : "absent"
     sr_2              = length(module.schema_registry_2) > 0 ? module.schema_registry_2[0].vm_name : "absent"
     rest_1            = length(module.kafka_rest_1) > 0 ? module.kafka_rest_1[0].vm_name : "absent"
+    connect_1         = length(module.kafka_connect_1) > 0 ? module.kafka_connect_1[0].vm_name : "absent"
+    connect_2         = length(module.kafka_connect_2) > 0 ? module.kafka_connect_2[0].vm_name : "absent"
+    ksqldb_1          = length(module.ksqldb_1) > 0 ? module.ksqldb_1[0].vm_name : "absent"
+    ksqldb_2          = length(module.ksqldb_2) > 0 ? module.ksqldb_2[0].vm_name : "absent"
     nftables_conf_sha = filesha256(local.nftables_conf_path)
-    overlay_v         = "2" # v2 (0.H.3) = pushes the ruleset to the ecosystem nodes too (schema-registry pair + REST proxy). v1 = 6 brokers only.
+    overlay_v         = "3" # v3 (0.H.4) = + the Connect cluster + the ksqlDB pair. v2 (0.H.3) = + the schema-registry pair + REST proxy. v1 = 6 brokers only.
   }
 
   depends_on = [
     module.kafka_east_1, module.kafka_east_2, module.kafka_east_3,
     module.kafka_west_1, module.kafka_west_2, module.kafka_west_3,
     module.schema_registry_1, module.schema_registry_2, module.kafka_rest_1,
+    module.kafka_connect_1, module.kafka_connect_2, module.ksqldb_1, module.ksqldb_2,
   ]
 
   provisioner "local-exec" {

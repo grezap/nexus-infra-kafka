@@ -148,7 +148,7 @@ resource "null_resource" "kafka_tls" {
     # to re-run to restore it.
     pki_role_name = var.vault_pki_kafka_role_name
     brokers       = jsonencode(local.kafka_enabled_brokers)
-    kafka_tls_v   = "3" # v3 (0.H.3) = dropped the `va_ids` trigger -- it re-ran the broker mTLS flip on every security-env re-apply (secret-id rotation churned the Vault Agent ids); paired with the kafka_vault_agent surgical-destroy fix so the TLS template survives agent re-installs. v2 = (a) kafka-tls-split.sh converts the Vault-PKI RSA key PKCS#1->PKCS#8 (`openssl pkcs8 -topk8`) -- Kafka's Java PEM parser rejects PKCS#1 with "InvalidKeyException: algid parse error"; (b) Phase 2 restart does `systemctl reset-failed` first. v1 = original.
+    kafka_tls_v   = "4" # v4 (0.H.4 recovery) = forced re-run to re-render the SSL server.properties that role-overlay-broker-config.tf clobbered back to PLAINTEXT when the nftables->broker-config id-trigger cascade re-ran it (the cascade is fixed in broker-config v2 / kraft-format v2). Content-identical to v3 -- this bump just re-asserts the mTLS server.properties. v3 (0.H.3) = dropped the `va_ids` trigger -- it re-ran the broker mTLS flip on every security-env re-apply (secret-id rotation churned the Vault Agent ids); paired with the kafka_vault_agent surgical-destroy fix so the TLS template survives agent re-installs. v2 = (a) kafka-tls-split.sh converts the Vault-PKI RSA key PKCS#1->PKCS#8 (`openssl pkcs8 -topk8`); (b) Phase 2 restart does `systemctl reset-failed` first. v1 = original.
 
     # Frozen for the destroy provisioner.
     destroy_broker_ips      = join(",", [for b in local.kafka_enabled_brokers : b.vmnet11])
