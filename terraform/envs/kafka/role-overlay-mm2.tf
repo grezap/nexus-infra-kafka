@@ -304,15 +304,22 @@ echo MM2_STAGE_OK
         }
         Write-Host "[mm2 $hostName] heartbeats topic live on the $dst cluster"
 
-        # 3b: journal sanity -- no TLS/auth failures, MM2 connectors mentioned.
+        # 3b: journal sanity -- no TLS/auth failures, and the MM2 dedicated-mode
+        # flow started. The MirrorSourceConnector floods the journal on a busy
+        # cluster (an offset-reset line per mirrored partition), so the -n 400
+        # tail reliably contains it -- but MirrorHeartbeatConnector's one-shot
+        # startup line can be pushed out of that window. Step 3a (the
+        # `heartbeats` topic exists on the target) already proves the
+        # HeartbeatConnector ran, so require ANY MM2 connector class here, not
+        # all three.
         $journal = (ssh @sshOpts "$sshUser@$ip" "sudo journalctl -u mm2.service --no-pager -n 400" 2>&1 | Out-String)
         if ($journal -match 'SSLHandshakeException' -or $journal -match 'Failed authentication') {
           Write-Host $journal
           throw "[mm2 $hostName] journal shows a TLS/auth failure -- mTLS to the brokers is broken"
         }
-        if ($journal -notmatch 'MirrorSourceConnector' -or $journal -notmatch 'MirrorHeartbeatConnector') {
+        if ($journal -notmatch 'Mirror(Source|Heartbeat|Checkpoint)Connector') {
           Write-Host $journal
-          throw "[mm2 $hostName] journal does not mention the MM2 connectors -- dedicated mode did not start the flow"
+          throw "[mm2 $hostName] journal does not mention any MM2 connector -- dedicated mode did not start the flow"
         }
         Write-Host "[mm2 $hostName] journal clean (connectors started, no TLS/auth errors)"
 

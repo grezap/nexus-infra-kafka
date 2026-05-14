@@ -9,6 +9,68 @@ blueprint — `nexus-platform-plan/MASTER-PLAN.md` line 160.
 
 ## [Unreleased]
 
+## 0.H.6 — Close-out canon batch + cold-rebuild proof — 2026-05-15
+
+Phase 0.H close-out. The canon artefacts are ratified, the tier is proven
+cold-rebuildable, and `nexus-infra-kafka` is tagged `v0.1.0` — **Phase 0.H
+is complete**. All 15 `03-kafka` tier VMs up; all five sub-phase smoke
+gates ALL GREEN.
+
+### Added
+
+- **`docs/handbook.md`** *(new)* — operator handbook: §0 prerequisites, §1
+  phase walkthrough (Packer build → security-env-first operator order →
+  apply → verify → iterate → tear down), §2 phase status table, §3
+  operator runbooks (cold-rebuild canon, smoke cheat sheet, credential
+  reference, the Kafka-CLI-`sudo` rule + common failure modes, Vault HA
+  reboot recovery, MirrorMaker 2 troubleshooting).
+- **Cold-rebuild proof** — `kafka.ps1 destroy` → `security.ps1 apply` →
+  `kafka.ps1 apply` → the four post-bring-up smoke gates `0.H.2`-`0.H.5`
+  re-run ALL GREEN (92 / 37 / 48 / 38), with no operator hot-state between
+  destroy and smoke. (`0.H.1` is the PLAINTEXT-era bring-up gate — its
+  plaintext probes correctly fail once `0.H.2` has flipped the brokers to
+  mTLS, so it is not part of a built-tier sweep; `0.H.2` re-asserts quorum
+  + RF=3 round-trip over mTLS.) Unlike the swarm tier there is no
+  stale-Vault-KV prerequisite — the Kafka tier's Vault-side state is
+  per-host AppRoles (re-apply regenerates the secret-ids) and the
+  `kafka-broker` PKI role (an upsert); the per-cluster KRaft cluster-UUIDs
+  are minted fresh on a cold apply. The rebuild surfaced four
+  VMware-under-load VM-layer transients (concurrent `vmrun start` "Unknown
+  error", a botched clone, an `ethernet1` vNIC that powered on
+  `no-carrier`, all recovered per handbook §3.7) — none a config or
+  overlay-logic bug.
+
+### Fixed
+
+- **MM2 journal-sanity check too strict** — `role-overlay-mm2.tf` Step 3b
+  and `smoke-0.H.5.ps1` required *both* `MirrorSourceConnector` and
+  `MirrorHeartbeatConnector` in the `journalctl -n 400` tail. On a busy
+  cluster the `MirrorSourceConnector` floods the journal with per-partition
+  offset-reset lines, pushing `MirrorHeartbeatConnector`'s one-shot startup
+  line out of the window — a false failure on a healthy MM2. Both now
+  require **any** MM2 connector class (`Mirror(Source|Heartbeat|Checkpoint)Connector`);
+  the `heartbeats`-topic-exists check already proves the heartbeat
+  connector ran. Surfaced by the 0.H.6 cold-rebuild.
+
+### Canon (in `nexus-platform-plan`)
+
+- **MASTER-PLAN.md** — the single `0.H` row expanded into sub-phase rows
+  `0.H.1`-`0.H.6` (mirroring the `0.D` / `0.E` expansion); the Phase 0
+  total line notes Phase 0.H complete.
+- **`docs/infra/vms.yaml`** — the `03-kafka` tier ratified: all 15 VMs run
+  at the `kafka-node` template's baked 8 GB (`modules/vm`'s `memory_mb`
+  resize is reserved-not-applied — the lighter per-role sizing is retained
+  as a tracked future enhancement); the `ksqldb-2` VMnet11 IP typo
+  (`.99` → `.98`) is fixed; `phase:` fields list the sub-phases.
+- **`docs/glossary.md`** — section 5 extended for the Confluent REST Proxy
+  + a fuller MirrorMaker 2 entry (dedicated mode, source-alias prefix).
+- **ADRs 0020-0023** — KRaft combined broker+controller mode · Kafka-tier
+  mTLS (Vault PKI PEM keystores + PKCS#1→PKCS#8 + the Confluent
+  PEM/PKCS#12 listener split) · Terraform overlay ordering via
+  `depends_on` not upstream-`.id` triggers (the id-trigger cascade
+  anti-pattern) · MirrorMaker 2 dedicated-mode one-flow-per-node topology.
+  The ADR index also gains the previously-missing ADR-0019 row.
+
 ## 0.H.5 — MirrorMaker 2 + the Phase 0.H exit gate — 2026-05-14
 
 The last two ecosystem nodes are live: a **MirrorMaker 2 cross-cluster DR

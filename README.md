@@ -82,18 +82,24 @@ docs/
 
 ## Status
 
-**0.H.5 closed** (2026-05-14) — the last two ecosystem nodes are live: a
-**MirrorMaker 2 cross-cluster DR pair** (`mm2-1` east→west, `mm2-2`
-west→east), each running Apache Kafka's `connect-mirror-maker` in
-dedicated mode, talking to **both** KRaft clusters over mutual TLS. **All
-15 `03-kafka` tier VMs are now up.** This sub-phase also clears the
-**Phase 0.H exit gate** — a fresh record produced to `kafka-east` appears
-on the mirrored topic on `kafka-west`, and the reverse. Smoke gate
-`scripts/smoke-0.H.5.ps1` is ALL GREEN (38 checks). Proof:
-[`docs/verification/0.H.5-mirrormaker2.md`](./docs/verification/0.H.5-mirrormaker2.md).
-Next: **0.H.6** — close-out canon batch + cold-rebuild proof; tag `v0.1.0`.
+**Phase 0.H complete** — `v0.1.0` tagged 2026-05-15. All 6 sub-phases
+closed; all 15 `03-kafka` tier VMs up; all five sub-phase smoke gates ALL
+GREEN; the tier is proven cold-rebuildable (`destroy` → `security apply` →
+`apply` → smoke, no operator hot-state). Operator handbook:
+[`docs/handbook.md`](./docs/handbook.md).
 
-Earlier:
+- **0.H.6 closed** (2026-05-15) — close-out canon batch (MASTER-PLAN
+  sub-phase rows + `vms.yaml` ratification + `glossary.md` + ADRs
+  0020-0023 + this repo's `docs/handbook.md`) + cold-rebuild proof; tagged
+  `v0.1.0`.
+- **0.H.5 closed** (2026-05-14) — the **MirrorMaker 2 cross-cluster DR
+  pair** (`mm2-1` east→west, `mm2-2` west→east), each running Apache
+  Kafka's `connect-mirror-maker` in dedicated mode, talking to **both**
+  KRaft clusters over mutual TLS. This sub-phase clears the **Phase 0.H
+  exit gate** — a fresh record produced to `kafka-east` appears on the
+  mirrored topic on `kafka-west`, and the reverse. `smoke-0.H.5.ps1` ALL
+  GREEN (38 checks).
+  [`docs/verification/0.H.5-mirrormaker2.md`](./docs/verification/0.H.5-mirrormaker2.md).
 - **0.H.4 closed** (2026-05-14) — the Kafka Connect distributed cluster
   (+ Debezium plugins) + the ksqlDB cluster;
   [`docs/verification/0.H.4-connect-ksqldb.md`](./docs/verification/0.H.4-connect-ksqldb.md).

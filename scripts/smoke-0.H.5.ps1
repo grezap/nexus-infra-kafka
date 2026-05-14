@@ -198,9 +198,14 @@ if ($failures.Count -gt 0) {
 Write-Section 'MM2 journal sanity (connectors started, no TLS/auth errors)'
 foreach ($ip in $mm2Ips) {
     $f = $flow[$ip]
-    Test-Check -Description "$ip ($($f.host)) : journal mentions the MM2 connectors" -Probe {
+    Test-Check -Description "$ip ($($f.host)) : journal mentions an MM2 connector (dedicated-mode flow started)" -Probe {
+        # MirrorSourceConnector floods the journal tail on a busy cluster (an
+        # offset-reset line per mirrored partition); MirrorHeartbeatConnector's
+        # one-shot startup line can fall out of the -n 400 window. Section 8's
+        # heartbeats-topic check already proves the HeartbeatConnector ran, so
+        # require ANY MM2 connector class here.
         $out = Invoke-RemoteCommand -Ip $ip -Command 'sudo journalctl -u mm2.service --no-pager -n 400'
-        ($out -match 'MirrorSourceConnector') -and ($out -match 'MirrorHeartbeatConnector')
+        $out -match 'Mirror(Source|Heartbeat|Checkpoint)Connector'
     } | Out-Null
     Test-Check -Description "$ip ($($f.host)) : journal has no SSLHandshakeException / Failed authentication" -Probe {
         $out = Invoke-RemoteCommand -Ip $ip -Command 'sudo journalctl -u mm2.service --no-pager -n 400'
