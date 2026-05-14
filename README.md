@@ -82,8 +82,14 @@ docs/
 
 ## Status
 
-**0.H.1 in progress** — `kafka-node` Packer template authored; Terraform
-env + KRaft bring-up overlays + `smoke-0.H.1.ps1` next.
+**0.H.1 closed** (2026-05-14) — both KRaft clusters live. `kafka-east`
+(primary) and `kafka-west` (DR) each run a 3-node combined
+broker+controller quorum on the PLAINTEXT VMnet10 backplane, with a
+verified RF=3 produce/consume round-trip. Smoke gate
+`scripts/smoke-0.H.1.ps1` is ALL GREEN (38 checks). Proof:
+[`docs/verification/0.H.1-kraft-bringup.md`](./docs/verification/0.H.1-kraft-bringup.md).
+Next: **0.H.2** — Vault PKI `kafka-broker` role + per-node Vault Agents +
+broker mTLS.
 
 ## License
 

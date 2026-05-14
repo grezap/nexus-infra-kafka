@@ -9,7 +9,15 @@ blueprint — `nexus-platform-plan/MASTER-PLAN.md` line 160.
 
 ## [Unreleased]
 
-### 0.H.1 — Repo scaffold + kafka-node Packer template (in progress)
+## 0.H.1 — Repo scaffold + kafka-node template + KRaft bring-up — 2026-05-14
+
+Two 3-node KRaft clusters (`kafka-east` primary + `kafka-west` DR) are
+live on PLAINTEXT VMnet10 backplanes, each with an elected controller
+quorum and a verified RF=3 produce/consume round-trip. Smoke gate
+`scripts/smoke-0.H.1.ps1` is ALL GREEN (38 `[OK]` / 0 `[FAIL]`).
+Verification: `docs/verification/0.H.1-kraft-bringup.md`.
+
+### Added
 
 - **New repo** `grezap/nexus-infra-kafka`, structurally mirroring
   `nexus-infra-swarm-nomad` (per master plan §7.1 — one `nexus-infra-*`
@@ -29,19 +37,39 @@ blueprint — `nexus-platform-plan/MASTER-PLAN.md` line 160.
   / IPs) for the Terraform role-overlays to source. Adapts the
   `swarm-node-firstboot.sh` pattern; unlike swarm-node it enables **no**
   role service (KRaft formatting needs a Terraform-time cluster UUID).
+- **`terraform/envs/kafka/`** — 6 broker `module.vm` blocks (kafka-east-1/2/3,
+  kafka-west-1/2/3) gated by `enable_kafka_cluster` / `enable_kafka_east` /
+  `enable_kafka_west` / per-VM toggles; 12 broker MAC vars; outputs +
+  operator `next_step` crib.
+- **`role-overlay-nftables-backplane.tf`** — pushes the kafka-correct
+  `nftables.conf` (whole-segment VMnet10 trust + operator ports
+  9092/8081/8082/8083/8088) to all brokers via SSH stdin + `nft -f`;
+  `filesha256` trigger.
+- **`role-overlay-broker-config.tf`** — renders `/etc/nexus-kafka/server.properties`
+  per broker (`process.roles=broker,controller`, `controller.quorum.voters`,
+  PLAINTEXT + CONTROLLER listeners, RF=3 defaults); enabled-broker set
+  passed into PowerShell via `jsonencode` + `ConvertFrom-Json`.
+- **`role-overlay-kraft-format.tf`** — `kafka_kraft_format` (per-cluster
+  cluster-UUID recover-or-mint + `kafka-storage format --ignore-formatted`)
+  and `kafka_broker_start_verify` (big-bang `kafka.service` enable+start,
+  wait for quorum, RF=3 round-trip).
+- **`scripts/kafka.ps1`** — pwsh operator wrapper (apply / destroy / smoke /
+  cycle / plan / validate), mirrors `swarm.ps1`.
+- **`scripts/smoke-0.H.1.ps1`** — chained 5-section verification gate.
+- **`nexus-infra-vmware`** foundation env gains
+  `role-overlay-gateway-kafka-reservations.tf` — 15 dnsmasq `dhcp-host`
+  reservations pinning the kafka-tier MACs to canonical VMnet11 IPs +
+  the `enable_kafka_dhcp_reservations` toggle + 15 `mac_kafka_*` vars.
 - Reused verbatim from `nexus-infra-swarm-nomad`: the four `nexus_*`
   shared Ansible roles, `terraform/modules/vm`, `scripts/configure-vm-nic.ps1`,
   `ansible.cfg`, the Debian 13 preseed + `chrony.conf` + `nftables.conf`.
 
-#### Still to land in 0.H.1
+### Fixed
 
-- `terraform/envs/kafka/` — 6 broker `module.vm` blocks + per-cluster
-  toggles.
-- `role-overlay-nftables-backplane.tf` — VMnet10 accept rules for the
-  Kafka ports.
-- `role-overlay-kraft-format.tf` — per-cluster cluster-UUID generation +
-  `kafka-storage format`.
-- `role-overlay-broker-config.tf` — render `server.properties`, start
-  `kafka.service`.
-- `scripts/kafka.ps1` + `scripts/smoke-0.H.1.ps1`.
-- `kafka-node` Packer build + `kafka-east` / `kafka-west` Terraform apply.
+- **Apache Kafka sha512 verification** — the `.tgz.sha512` sidecar wraps
+  the hash across indented multi-line continuation lines, breaking the
+  single-line `awk` parse (`no properly formatted checksum lines found`).
+  Pinned the literal hash in `kafka_node_kafka_sha512` and verify via
+  `echo "<hash>  <file>" | sha512sum -c -`. ([`3a59928`])
+
+[`3a59928`]: https://github.com/grezap/nexus-infra-kafka/commit/3a59928
