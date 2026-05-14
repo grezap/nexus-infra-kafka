@@ -9,6 +9,57 @@ blueprint — `nexus-platform-plan/MASTER-PLAN.md` line 160.
 
 ## [Unreleased]
 
+## 0.H.2 — Broker mutual TLS — 2026-05-14
+
+Both KRaft clusters flipped from the 0.H.1 PLAINTEXT backplane to mutual
+TLS — per-node Vault PKI leaf certs, SSL on the client *and* controller
+listeners, `ssl.client.auth=required` everywhere. Smoke gate
+`scripts/smoke-0.H.2.ps1` is ALL GREEN (92 `[OK]` / 0 `[FAIL]`).
+Verification: `docs/verification/0.H.2-broker-mtls.md`.
+
+### Added
+
+- **`role-overlay-kafka-vault-agents.tf`** — installs `nexus-vault-agent.service`
+  on each broker (`for_each`, independently `-target`-able). Each agent
+  authenticates to `vault-1` via a narrow per-host AppRole and renders
+  certs from Vault PKI. Systemd unit ships with `RuntimeDirectory=` for
+  reboot-survival of the `/var/run` token sink.
+- **`role-overlay-kafka-tls.tf`** — the PLAINTEXT→mTLS flip. Phase 1:
+  per-node sequential cert render (Vault Agent `pkiCert` →
+  `kafka-tls-split.sh` → PEM keystore/truststore) + mTLS `server.properties`
+  drop. Phase 2: per-cluster **parallel-within-cluster big-bang restart**
+  of `kafka.service` (a TLS wire-format flip can't be a sequential rolling
+  restart — the consul-tls / nomad-tls lesson). Phase 3: KRaft quorum +
+  RF=3 round-trip verified over mTLS. Destroy provisioner restores a
+  working PLAINTEXT state.
+- **`scripts/smoke-0.H.2.ps1`** — 9-section, 92-check mTLS gate;
+  `scripts/kafka.ps1` default phase → `0.H.2`.
+- **`nexus-infra-vmware`** security env gains the Vault-side state:
+  `role-overlay-vault-pki-kafka.tf` (the `kafka-broker` PKI role,
+  server+client EKU, 90-day TTL) + `role-overlay-vault-agent-kafka-policies.tf`
+  + `role-overlay-vault-agent-kafka-approles.tf` (6 narrow policies + 6
+  AppRoles + per-host JSON credential sidecars).
+
+### Design
+
+- mTLS on the existing 0.H.1 ports (`9092` client + inter-broker, `9093`
+  controller) — only the wire protocol flips, so the nftables overlay
+  needs no change. `ssl.client.auth=required` everywhere → every Kafka
+  client runs *from* a broker and uses that broker's own keystore as its
+  client identity.
+- Kafka 3.8 native PEM keystore (`ssl.keystore.type=PEM`) — no JKS, no
+  `keytool`, no keystore password.
+
+### Fixed
+
+- **PKCS#1 → PKCS#8 key conversion** — Vault PKI issues RSA keys in
+  PKCS#1 (`-----BEGIN RSA PRIVATE KEY-----`); Kafka's Java PEM keystore
+  parser only accepts PKCS#8, failing broker startup with
+  `java.security.InvalidKeyException: algid parse error`. `kafka-tls-split.sh`
+  now converts via `openssl pkcs8 -topk8 -nocrypt`. Also added
+  `systemctl reset-failed` before the Phase 2 restart so a re-run isn't
+  blocked by a start-limited prior attempt. (`kafka_tls_v` v2)
+
 ## 0.H.1 — Repo scaffold + kafka-node template + KRaft bring-up — 2026-05-14
 
 Two 3-node KRaft clusters (`kafka-east` primary + `kafka-west` DR) are

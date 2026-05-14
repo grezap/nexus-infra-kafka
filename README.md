@@ -82,14 +82,18 @@ docs/
 
 ## Status
 
-**0.H.1 closed** (2026-05-14) — both KRaft clusters live. `kafka-east`
-(primary) and `kafka-west` (DR) each run a 3-node combined
-broker+controller quorum on the PLAINTEXT VMnet10 backplane, with a
-verified RF=3 produce/consume round-trip. Smoke gate
-`scripts/smoke-0.H.1.ps1` is ALL GREEN (38 checks). Proof:
+**0.H.2 closed** (2026-05-14) — both KRaft clusters run on **mutual TLS**.
+Per-node Vault PKI leaf certs (issued by a `nexus-vault-agent.service` on
+each broker), SSL on the client *and* controller listeners,
+`ssl.client.auth=required` everywhere. The KRaft quorum + RF=3
+produce/consume round-trip are verified over mTLS on both clusters.
+Smoke gate `scripts/smoke-0.H.2.ps1` is ALL GREEN (92 checks). Proof:
+[`docs/verification/0.H.2-broker-mtls.md`](./docs/verification/0.H.2-broker-mtls.md).
+Next: **0.H.3** — Schema Registry ×2 + REST Proxy.
+
+Earlier: **0.H.1 closed** (2026-05-14) — both 3-node KRaft clusters
+brought up on the PLAINTEXT VMnet10 backplane;
 [`docs/verification/0.H.1-kraft-bringup.md`](./docs/verification/0.H.1-kraft-bringup.md).
-Next: **0.H.2** — Vault PKI `kafka-broker` role + per-node Vault Agents +
-broker mTLS.
 
 ## License
 

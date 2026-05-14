@@ -179,3 +179,77 @@ variable "kafka_cluster_timeout_minutes" {
   default     = 20
   description = "Per-node readiness timeout (SSH echo + firstboot marker) in the bring-up overlays."
 }
+
+# ─── Phase 0.H.2 — broker mTLS (Vault Agents + TLS overlay) ───────────────
+#
+# Cross-env coupling: the Vault-side state (pki_int/roles/kafka-broker + 6
+# per-broker AppRoles + JSON sidecars) is owned by nexus-infra-vmware's
+# security env (role-overlay-vault-pki-kafka.tf + role-overlay-vault-agent-
+# kafka-{policies,approles}.tf). Operator order:
+#   1. nexus-infra-vmware: pwsh -File scripts/security.ps1 apply
+#   2. nexus-infra-kafka:  pwsh -File scripts/kafka.ps1 apply
+#
+# role-overlay-kafka-vault-agents.tf installs nexus-vault-agent.service on
+# each broker; role-overlay-kafka-tls.tf issues per-node PKI leaf certs and
+# flips both KRaft clusters from PLAINTEXT to mutual TLS.
+
+variable "enable_kafka_vault_agents" {
+  type        = bool
+  default     = true
+  description = "Master gate for role-overlay-kafka-vault-agents.tf -- install nexus-vault-agent.service on all 6 brokers. Reads the AppRole sidecars written by the security env. Default true (steady state per memory/feedback_terraform_partial_apply_destroys_resources.md)."
+}
+
+variable "enable_kafka_east_1_vault_agent" {
+  type    = bool
+  default = true
+}
+variable "enable_kafka_east_2_vault_agent" {
+  type    = bool
+  default = true
+}
+variable "enable_kafka_east_3_vault_agent" {
+  type    = bool
+  default = true
+}
+variable "enable_kafka_west_1_vault_agent" {
+  type    = bool
+  default = true
+}
+variable "enable_kafka_west_2_vault_agent" {
+  type    = bool
+  default = true
+}
+variable "enable_kafka_west_3_vault_agent" {
+  type    = bool
+  default = true
+}
+
+variable "enable_kafka_tls" {
+  type        = bool
+  default     = true
+  description = "role-overlay-kafka-tls.tf -- flip both KRaft clusters from PLAINTEXT (0.H.1) to mutual TLS (per-node Vault PKI leaf certs, ssl.client.auth=required, per-cluster parallel big-bang restart). Default true. Set false to keep the clusters on PLAINTEXT/9092 (0.H.1 steady state)."
+}
+
+variable "vault_agent_version" {
+  type        = string
+  default     = "1.18.4"
+  description = "Vault binary version to install on each broker as nexus-vault-agent.service. Matches nexus-infra-vmware/packer/vault/variables.pkr.hcl + nexus-infra-swarm-nomad's vault_agent_version."
+}
+
+variable "vault_agent_kafka_creds_dir" {
+  type        = string
+  default     = "$HOME/.nexus"
+  description = "Directory on the build host holding the 6 vault-agent-kafka-<host>.json AppRole sidecars (written by nexus-infra-vmware security env). Each carries role_id + secret_id + CA path + vault address."
+}
+
+variable "vault_pki_ca_bundle_path" {
+  type        = string
+  default     = "$HOME/.nexus/vault-ca-bundle.crt"
+  description = "Path on the build host to the Vault PKI root+intermediate CA bundle (written by nexus-infra-vmware security env at 0.D.2). Each broker's Vault Agent uses it to verify the vault server cert."
+}
+
+variable "vault_pki_kafka_role_name" {
+  type        = string
+  default     = "kafka-broker"
+  description = "Name of the Vault PKI role under pki_int/ that issues broker leaf certs. Must match var.vault_pki_kafka_role_name in nexus-infra-vmware's security env."
+}
