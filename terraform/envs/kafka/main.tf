@@ -262,3 +262,36 @@ module "ksqldb_2" {
   vnet_secondary = var.vnet_secondary
   mac_secondary  = var.mac_ksqldb_2_secondary
 }
+
+# ─── MirrorMaker 2 (2, bidirectional DR) -- 0.H.5 ─────────────────────────
+module "mm2_1" {
+  source = "../../modules/vm"
+  count  = var.enable_kafka_cluster && var.enable_mm2 && var.enable_mm2_1 ? 1 : 0
+
+  vm_name           = "mm2-1"
+  template_vmx_path = var.template_vmx_path
+  vm_output_dir     = "${var.vm_output_dir_root}/mm2-1"
+  vmrun_path        = var.vmrun_path
+
+  vnet        = var.vnet_primary
+  mac_address = var.mac_mm2_1_primary
+
+  vnet_secondary = var.vnet_secondary
+  mac_secondary  = var.mac_mm2_1_secondary
+}
+
+module "mm2_2" {
+  source = "../../modules/vm"
+  count  = var.enable_kafka_cluster && var.enable_mm2 && var.enable_mm2_2 ? 1 : 0
+
+  vm_name           = "mm2-2"
+  template_vmx_path = var.template_vmx_path
+  vm_output_dir     = "${var.vm_output_dir_root}/mm2-2"
+  vmrun_path        = var.vmrun_path
+
+  vnet        = var.vnet_primary
+  mac_address = var.mac_mm2_2_primary
+
+  vnet_secondary = var.vnet_secondary
+  mac_secondary  = var.mac_mm2_2_secondary
+}

@@ -56,6 +56,9 @@ locals {
     "kafka-connect-2" = { vm_ip = "192.168.70.96", cluster = "east", enabled = var.enable_kafka_connect_2_vault_agent }
     "ksqldb-1"        = { vm_ip = "192.168.70.97", cluster = "east", enabled = var.enable_ksqldb_1_vault_agent }
     "ksqldb-2"        = { vm_ip = "192.168.70.98", cluster = "east", enabled = var.enable_ksqldb_2_vault_agent }
+    # 0.H.5 ecosystem nodes (MirrorMaker 2 -- Kafka clients of BOTH clusters):
+    "mm2-1" = { vm_ip = "192.168.70.85", cluster = "both", enabled = var.enable_mm2_1_vault_agent }
+    "mm2-2" = { vm_ip = "192.168.70.86", cluster = "both", enabled = var.enable_mm2_2_vault_agent }
   }
 
   kafka_vault_agent_active = {
@@ -94,6 +97,7 @@ resource "null_resource" "kafka_vault_agent" {
     null_resource.kafka_broker_start_verify,
     module.schema_registry_1, module.schema_registry_2, module.kafka_rest_1,
     module.kafka_connect_1, module.kafka_connect_2, module.ksqldb_1, module.ksqldb_2,
+    module.mm2_1, module.mm2_2,
   ]
 
   provisioner "local-exec" {

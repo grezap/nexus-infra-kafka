@@ -9,6 +9,66 @@ blueprint — `nexus-platform-plan/MASTER-PLAN.md` line 160.
 
 ## [Unreleased]
 
+## 0.H.5 — MirrorMaker 2 + the Phase 0.H exit gate — 2026-05-14
+
+The last two ecosystem nodes are live: a **MirrorMaker 2 cross-cluster DR
+pair** (`mm2-1` east→west, `mm2-2` west→east). **All 15 `03-kafka` tier
+VMs are now up.** This sub-phase also clears the **Phase 0.H exit gate** —
+a fresh record produced to `kafka-east` appears on the mirrored topic on
+`kafka-west`, and the reverse. Smoke gate `scripts/smoke-0.H.5.ps1` is
+ALL GREEN (38 `[OK]` / 0 `[FAIL]`). Verification:
+`docs/verification/0.H.5-mirrormaker2.md`.
+
+### Added
+
+- **2 ecosystem `module.vm` blocks** — `mm2-1/mm2-2` (.85/.86), with
+  enable toggles + MACs matched to the foundation env's dnsmasq
+  reservations.
+- **`role-overlay-mm2.tf`** *(new)* — renders `mm2.properties` per node
+  (MM2 dedicated mode: both clusters registered, per-cluster `<alias>.ssl.*`
+  PEM mTLS, only that node's one `<src>→<dst>.enabled = true` flow) + a
+  systemd drop-in appending `--clusters <target>` to the baked
+  `mm2.service` `ExecStart`; sequential start; per-node verify (journal
+  sanity → `heartbeats` topic on the target → the exit-gate
+  produce→mirror→consume round-trip).
+- **`role-overlay-ecosystem-tls.tf` / `role-overlay-kafka-vault-agents.tf`
+  / `role-overlay-nftables-backplane.tf`** extended to the 2 MM2 nodes
+  (`overlay_v` v4); the security env's policies + AppRoles extended to
+  **15 kafka-node Vault Agents — the whole tier** (`kafka_policies_overlay_v`
+  / `kafka_approles_v` v4; the MM2 policy `cluster = "both"`).
+- **`scripts/smoke-0.H.5.ps1`** *(new)* — 9-section, 38-check MM2 gate
+  including the bidirectional Phase 0.H exit gate; `scripts/kafka.ps1`
+  default phase → `0.H.5`.
+
+### Design
+
+- **MM2 dedicated mode auto-cascades cluster-level TLS.** Unlike
+  standalone Connect (0.H.4's pain), `<alias>.ssl.*` / `<alias>.security.protocol`
+  `putIfAbsent`-cascade to the producer/consumer/admin clients — the SSL
+  block is written **once per alias**. All MM2 clients are Kafka clients,
+  so `ssl.keystore.type=PEM` works throughout.
+- **The embedded Connect REST server is left off** (`dedicated.mode.enable.internal.rest`
+  defaults to `false`) — it is only needed for multi-node MM2
+  coordination, and this topology runs one node per flow. So the
+  Apache-Kafka-`RestServer`-rejects-PEM problem never arises; the `.p12`
+  files on the MM2 nodes are unused.
+- `DefaultReplicationPolicy` — `T` on `east` mirrors to `west` as
+  `east.T`; the source-alias prefix keeps the bidirectional pair
+  loop-safe.
+
+### Fixed
+
+- **Kafka CLI probes need `sudo`** — the `kafka_mm2` overlay's first
+  apply attempt failed with `java.nio.file.AccessDeniedException:
+  /etc/nexus-kafka/client-ssl.properties`: that dir is `0750 root:kafka`
+  and `nexusadmin` cannot traverse it to read the client config / the
+  keystore. MM2 itself was healthy (the journal showed all three
+  connectors committing offsets) — only the probe was blind. Every Kafka
+  CLI call in `role-overlay-mm2.tf` + `smoke-0.H.5.ps1` now runs under
+  `sudo` (the `/etc/consul.d/` 0750-traverse lesson, Kafka edition). Also
+  hardened the topic-list match for `Out-String`'s `\r\n`
+  (`(?m)^heartbeats\r?$`).
+
 ## 0.H.4 — Kafka Connect + Debezium + ksqlDB — 2026-05-14
 
 The next four ecosystem nodes are live: a Kafka Connect distributed

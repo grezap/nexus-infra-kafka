@@ -45,6 +45,8 @@ locals {
     var.enable_kafka_connect && var.enable_kafka_connect_2 ? "192.168.70.96" : "",
     var.enable_ksqldb && var.enable_ksqldb_1 ? "192.168.70.97" : "",
     var.enable_ksqldb && var.enable_ksqldb_2 ? "192.168.70.98" : "",
+    var.enable_mm2 && var.enable_mm2_1 ? "192.168.70.85" : "",
+    var.enable_mm2 && var.enable_mm2_2 ? "192.168.70.86" : "",
   ])
   kafka_node_ips     = concat(local.kafka_broker_ips, local.kafka_ecosystem_ips)
   nftables_conf_path = abspath("${path.module}/../../../packer/kafka-node/files/nftables.conf")
@@ -67,8 +69,10 @@ resource "null_resource" "kafka_nftables_backplane" {
     connect_2         = length(module.kafka_connect_2) > 0 ? module.kafka_connect_2[0].vm_name : "absent"
     ksqldb_1          = length(module.ksqldb_1) > 0 ? module.ksqldb_1[0].vm_name : "absent"
     ksqldb_2          = length(module.ksqldb_2) > 0 ? module.ksqldb_2[0].vm_name : "absent"
+    mm2_1             = length(module.mm2_1) > 0 ? module.mm2_1[0].vm_name : "absent"
+    mm2_2             = length(module.mm2_2) > 0 ? module.mm2_2[0].vm_name : "absent"
     nftables_conf_sha = filesha256(local.nftables_conf_path)
-    overlay_v         = "3" # v3 (0.H.4) = + the Connect cluster + the ksqlDB pair. v2 (0.H.3) = + the schema-registry pair + REST proxy. v1 = 6 brokers only.
+    overlay_v         = "4" # v4 (0.H.5) = + the MirrorMaker 2 pair (all 15 tier nodes). v3 (0.H.4) = + the Connect cluster + the ksqlDB pair. v2 (0.H.3) = + the schema-registry pair + REST proxy. v1 = 6 brokers only.
   }
 
   depends_on = [
@@ -76,6 +80,7 @@ resource "null_resource" "kafka_nftables_backplane" {
     module.kafka_west_1, module.kafka_west_2, module.kafka_west_3,
     module.schema_registry_1, module.schema_registry_2, module.kafka_rest_1,
     module.kafka_connect_1, module.kafka_connect_2, module.ksqldb_1, module.ksqldb_2,
+    module.mm2_1, module.mm2_2,
   ]
 
   provisioner "local-exec" {

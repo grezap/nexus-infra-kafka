@@ -82,17 +82,21 @@ docs/
 
 ## Status
 
-**0.H.4 closed** (2026-05-14) — the next four ecosystem nodes are live: a
-**Kafka Connect distributed cluster** (`kafka-connect-1/2`, with the
-**Debezium** Postgres + SQL Server connector plugins loaded) and a
-**ksqlDB cluster** (`ksqldb-1/2`). Each holds a per-node Vault-PKI
-keystore, connects to the `kafka-east` brokers over mutual TLS, and serves
-its own HTTPS listener. **13 of the 15 `03-kafka` tier VMs are now up.**
-Smoke gate `scripts/smoke-0.H.4.ps1` is ALL GREEN (48 checks). Proof:
-[`docs/verification/0.H.4-connect-ksqldb.md`](./docs/verification/0.H.4-connect-ksqldb.md).
-Next: **0.H.5** — MirrorMaker 2 ×2 + the phase exit-gate test.
+**0.H.5 closed** (2026-05-14) — the last two ecosystem nodes are live: a
+**MirrorMaker 2 cross-cluster DR pair** (`mm2-1` east→west, `mm2-2`
+west→east), each running Apache Kafka's `connect-mirror-maker` in
+dedicated mode, talking to **both** KRaft clusters over mutual TLS. **All
+15 `03-kafka` tier VMs are now up.** This sub-phase also clears the
+**Phase 0.H exit gate** — a fresh record produced to `kafka-east` appears
+on the mirrored topic on `kafka-west`, and the reverse. Smoke gate
+`scripts/smoke-0.H.5.ps1` is ALL GREEN (38 checks). Proof:
+[`docs/verification/0.H.5-mirrormaker2.md`](./docs/verification/0.H.5-mirrormaker2.md).
+Next: **0.H.6** — close-out canon batch + cold-rebuild proof; tag `v0.1.0`.
 
 Earlier:
+- **0.H.4 closed** (2026-05-14) — the Kafka Connect distributed cluster
+  (+ Debezium plugins) + the ksqlDB cluster;
+  [`docs/verification/0.H.4-connect-ksqldb.md`](./docs/verification/0.H.4-connect-ksqldb.md).
 - **0.H.3 closed** (2026-05-14) — the Schema Registry HA pair + Confluent
   REST Proxy;
   [`docs/verification/0.H.3-schema-registry-rest.md`](./docs/verification/0.H.3-schema-registry-rest.md).

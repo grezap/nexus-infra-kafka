@@ -467,3 +467,60 @@ variable "mac_ksqldb_2_secondary" {
   type    = string
   default = "00:50:56:3F:01:6B"
 }
+
+# ─── Phase 0.H.5 — MirrorMaker 2 (bidirectional cross-cluster DR) ─────────
+#
+# The last 2 ecosystem VMs: mm2-1 (.85, mirrors east->west) + mm2-2 (.86,
+# mirrors west->east). Each runs Apache Kafka's connect-mirror-maker driver,
+# is a Kafka client of BOTH KRaft clusters, and reuses
+# role-overlay-ecosystem-tls.tf for its Vault-PKI keystore. The Phase 0.H
+# exit gate -- produce east -> appears west -- runs here.
+
+variable "enable_mm2" {
+  type        = bool
+  default     = true
+  description = "Gate for the MirrorMaker 2 pair (mm2-1 east->west, mm2-2 west->east). Default true."
+}
+
+variable "enable_mm2_1" {
+  type    = bool
+  default = true
+}
+variable "enable_mm2_2" {
+  type    = bool
+  default = true
+}
+
+variable "enable_mm2_config" {
+  type        = bool
+  default     = true
+  description = "role-overlay-mm2.tf -- render mm2.properties on each MM2 node + enable/start mm2.service + run the Phase 0.H exit-gate test (produce east -> appears west). Default true."
+}
+
+variable "enable_mm2_1_vault_agent" {
+  type    = bool
+  default = true
+}
+variable "enable_mm2_2_vault_agent" {
+  type    = bool
+  default = true
+}
+
+# MACs -- must match nexus-infra-vmware foundation env's dnsmasq dhcp-host
+# reservations: :6C/:6D pin mm2-1/2 -> .85/.86.
+variable "mac_mm2_1_primary" {
+  type    = string
+  default = "00:50:56:3F:00:6C"
+}
+variable "mac_mm2_1_secondary" {
+  type    = string
+  default = "00:50:56:3F:01:6C"
+}
+variable "mac_mm2_2_primary" {
+  type    = string
+  default = "00:50:56:3F:00:6D"
+}
+variable "mac_mm2_2_secondary" {
+  type    = string
+  default = "00:50:56:3F:01:6D"
+}

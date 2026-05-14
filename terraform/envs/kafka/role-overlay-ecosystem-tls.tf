@@ -40,6 +40,8 @@ locals {
     var.enable_kafka_connect && var.enable_kafka_connect_2 ? [{ host = "kafka-connect-2", vmnet10 = "192.168.10.96", vmnet11 = "192.168.70.96" }] : [],
     var.enable_ksqldb && var.enable_ksqldb_1 ? [{ host = "ksqldb-1", vmnet10 = "192.168.10.97", vmnet11 = "192.168.70.97" }] : [],
     var.enable_ksqldb && var.enable_ksqldb_2 ? [{ host = "ksqldb-2", vmnet10 = "192.168.10.98", vmnet11 = "192.168.70.98" }] : [],
+    var.enable_mm2 && var.enable_mm2_1 ? [{ host = "mm2-1", vmnet10 = "192.168.10.85", vmnet11 = "192.168.70.85" }] : [],
+    var.enable_mm2 && var.enable_mm2_2 ? [{ host = "mm2-2", vmnet10 = "192.168.10.86", vmnet11 = "192.168.70.86" }] : [],
   )
 }
 
