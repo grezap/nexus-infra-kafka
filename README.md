@@ -82,18 +82,23 @@ docs/
 
 ## Status
 
-**0.H.2 closed** (2026-05-14) — both KRaft clusters run on **mutual TLS**.
-Per-node Vault PKI leaf certs (issued by a `nexus-vault-agent.service` on
-each broker), SSL on the client *and* controller listeners,
-`ssl.client.auth=required` everywhere. The KRaft quorum + RF=3
-produce/consume round-trip are verified over mTLS on both clusters.
-Smoke gate `scripts/smoke-0.H.2.ps1` is ALL GREEN (92 checks). Proof:
-[`docs/verification/0.H.2-broker-mtls.md`](./docs/verification/0.H.2-broker-mtls.md).
-Next: **0.H.3** — Schema Registry ×2 + REST Proxy.
+**0.H.3 closed** (2026-05-14) — the first three ecosystem nodes are live:
+the **Schema Registry HA pair** (`schema-registry-1/2`) and the
+**Confluent REST Proxy** (`kafka-rest-1`). Each holds a per-node Vault-PKI
+keystore, connects to the `kafka-east` brokers over mutual TLS, and serves
+its own HTTPS listener. Verified: an HA schema register→fetch round-trip
+across the pair + a REST produce/consume round-trip. Smoke gate
+`scripts/smoke-0.H.3.ps1` is ALL GREEN (37 checks). Proof:
+[`docs/verification/0.H.3-schema-registry-rest.md`](./docs/verification/0.H.3-schema-registry-rest.md).
+Next: **0.H.4** — Kafka Connect ×2 + Debezium + ksqlDB ×2.
 
-Earlier: **0.H.1 closed** (2026-05-14) — both 3-node KRaft clusters
-brought up on the PLAINTEXT VMnet10 backplane;
-[`docs/verification/0.H.1-kraft-bringup.md`](./docs/verification/0.H.1-kraft-bringup.md).
+Earlier:
+- **0.H.2 closed** (2026-05-14) — both KRaft clusters flipped to **mutual
+  TLS** (per-node Vault PKI leaf certs, `ssl.client.auth=required`);
+  [`docs/verification/0.H.2-broker-mtls.md`](./docs/verification/0.H.2-broker-mtls.md).
+- **0.H.1 closed** (2026-05-14) — both 3-node KRaft clusters brought up on
+  the PLAINTEXT VMnet10 backplane;
+  [`docs/verification/0.H.1-kraft-bringup.md`](./docs/verification/0.H.1-kraft-bringup.md).
 
 ## License
 

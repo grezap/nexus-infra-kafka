@@ -36,6 +36,10 @@
  */
 
 locals {
+  # One spec per kafka-node Vault Agent. The 6 brokers landed in 0.H.2; the
+  # ecosystem nodes are added per sub-phase (schema-registry + kafka-rest in
+  # 0.H.3; kafka-connect + ksqldb in 0.H.4; mm2 in 0.H.5). `cluster` is the
+  # KRaft cluster the node's certs + Kafka-client config target.
   kafka_vault_agent_specs = {
     "kafka-east-1" = { vm_ip = "192.168.70.21", cluster = "east", enabled = var.enable_kafka_east_1_vault_agent }
     "kafka-east-2" = { vm_ip = "192.168.70.22", cluster = "east", enabled = var.enable_kafka_east_2_vault_agent }
@@ -43,6 +47,10 @@ locals {
     "kafka-west-1" = { vm_ip = "192.168.70.24", cluster = "west", enabled = var.enable_kafka_west_1_vault_agent }
     "kafka-west-2" = { vm_ip = "192.168.70.25", cluster = "west", enabled = var.enable_kafka_west_2_vault_agent }
     "kafka-west-3" = { vm_ip = "192.168.70.26", cluster = "west", enabled = var.enable_kafka_west_3_vault_agent }
+    # 0.H.3 ecosystem nodes (Kafka clients of kafka-east):
+    "schema-registry-1" = { vm_ip = "192.168.70.91", cluster = "east", enabled = var.enable_schema_registry_1_vault_agent }
+    "schema-registry-2" = { vm_ip = "192.168.70.92", cluster = "east", enabled = var.enable_schema_registry_2_vault_agent }
+    "kafka-rest-1"      = { vm_ip = "192.168.70.88", cluster = "east", enabled = var.enable_kafka_rest_1_vault_agent }
   }
 
   kafka_vault_agent_active = {
@@ -77,7 +85,10 @@ resource "null_resource" "kafka_vault_agent" {
     destroy_ssh_user = var.kafka_node_user
   }
 
-  depends_on = [null_resource.kafka_broker_start_verify]
+  depends_on = [
+    null_resource.kafka_broker_start_verify,
+    module.schema_registry_1, module.schema_registry_2, module.kafka_rest_1,
+  ]
 
   provisioner "local-exec" {
     when        = create
@@ -90,6 +101,7 @@ resource "null_resource" "kafka_vault_agent" {
       $credsFile    = '${local.kafka_va_creds_dir_expanded}/vault-agent-${each.key}.json'
       $caBundlePath = '${local.kafka_va_ca_bundle_expanded}'
       $sshUser      = '${var.kafka_node_user}'
+      $bootTimeout  = ${var.kafka_cluster_timeout_minutes}
 
       # Pre-flight: AppRole creds JSON must exist (security env writes it).
       # ERROR (not WARN+skip) -- mirrors the 0.E.2 v2 fix.
@@ -111,6 +123,23 @@ resource "null_resource" "kafka_vault_agent" {
       }
 
       $sshOpts = @('-o','ConnectTimeout=10','-o','BatchMode=yes','-o','StrictHostKeyChecking=no')
+
+      # Wait for SSH + the kafka-node firstboot marker. The 6 brokers are
+      # already up (0.H.1/0.H.2) so this passes immediately for them; the
+      # 0.H.3+ ecosystem nodes are freshly cloned in the same apply and need
+      # the boot + firstboot wait. (kafka_va_overlay_v intentionally NOT
+      # bumped for this -- the broker instances are already in state and
+      # don't need re-running; new ecosystem instances pick up this wait
+      # automatically. Mirrors the 0.E.2 swarm_va_overlay_v note.)
+      Write-Host "[kafka-va $hostName] waiting for SSH + firstboot marker..."
+      $bootDeadline = (Get-Date).AddMinutes($bootTimeout)
+      $booted = $false
+      while ((Get-Date) -lt $bootDeadline) {
+        $probe = (ssh @sshOpts "$sshUser@$vmIp" "test -f /var/lib/kafka-node-firstboot-done && echo READY" 2>&1 | Out-String).Trim()
+        if ($probe -match 'READY') { $booted = $true; break }
+        Start-Sleep -Seconds 15
+      }
+      if (-not $booted) { throw "[kafka-va $hostName] SSH + firstboot marker never ready after $bootTimeout min" }
 
       # Step 1: probe -- already installed + active?
       $probe = (ssh @sshOpts "$sshUser@$vmIp" "test -x /usr/local/bin/vault && /usr/local/bin/vault version 2>/dev/null && systemctl is-active nexus-vault-agent.service 2>/dev/null" 2>&1 | Out-String).Trim()
@@ -310,9 +339,16 @@ sudo systemctl enable --now nexus-vault-agent.service
     PWSH
   }
 
-  # Destroy: stop + disable + remove the agent. Idempotent. Only `self`,
-  # `count.index`, `each.key` are reachable in a destroy provisioner -- vm_ip
-  # + ssh_user are frozen into triggers above.
+  # Destroy: stop + disable + remove the agent. SURGICAL -- removes only the
+  # files THIS overlay installs (00-base.hcl + role-id/secret-id/ca-bundle +
+  # the systemd unit). It deliberately does NOT `rm -rf /etc/vault-agent/`,
+  # because the TLS overlays (role-overlay-kafka-tls.tf /
+  # role-overlay-ecosystem-tls.tf) drop 60-template-kafka-tls.hcl in that
+  # same dir. A `creds_file_hash` rotation destroy+recreates this resource on
+  # every security-env re-apply; a blanket rm would take the TLS template
+  # with it and silently stop cert renewal until the TLS overlay re-ran.
+  # Only `self`, `count.index`, `each.key` are reachable in a destroy
+  # provisioner -- vm_ip + ssh_user are frozen into triggers above.
   provisioner "local-exec" {
     when        = destroy
     interpreter = ["pwsh", "-NoProfile", "-Command"]
@@ -321,8 +357,8 @@ sudo systemctl enable --now nexus-vault-agent.service
       $vmIp     = '${self.triggers.destroy_vm_ip}'
       $sshUser  = '${self.triggers.destroy_ssh_user}'
       $sshOpts  = @('-o','ConnectTimeout=5','-o','BatchMode=yes','-o','StrictHostKeyChecking=no')
-      Write-Host "[kafka-va destroy] $${hostName}: stopping nexus-vault-agent + cleaning files"
-      ssh @sshOpts "$sshUser@$vmIp" "sudo systemctl disable --now nexus-vault-agent.service 2>/dev/null; sudo rm -rf /etc/vault-agent /var/run/nexus-vault-agent /var/log/nexus-vault-agent /etc/systemd/system/nexus-vault-agent.service; sudo systemctl daemon-reload" 2>$null
+      Write-Host "[kafka-va destroy] $${hostName}: stopping nexus-vault-agent + cleaning install-owned files (keeping /etc/vault-agent/ + TLS template)"
+      ssh @sshOpts "$sshUser@$vmIp" "sudo systemctl disable --now nexus-vault-agent.service 2>/dev/null; sudo rm -f /etc/vault-agent/00-base.hcl /etc/vault-agent/role-id /etc/vault-agent/secret-id /etc/vault-agent/ca-bundle.crt /etc/systemd/system/nexus-vault-agent.service; sudo systemctl daemon-reload" 2>$null
       exit 0
     PWSH
   }

@@ -26,10 +26,10 @@
   validate -- terraform fmt -check -recursive + terraform validate
 
 .PARAMETER Phase
-  Which smoke phase to run. '0.H.2' (default) is the active phase;
-  '0.H.1' is kept for re-running the PLAINTEXT bring-up gate (valid only
-  before 0.H.2 flips the clusters to mTLS). Later sub-phases add their own
-  gates.
+  Which smoke phase to run. '0.H.3' (default) is the active phase
+  (Schema Registry HA pair + REST Proxy). '0.H.2' runs the broker-mTLS
+  gate; '0.H.1' the PLAINTEXT bring-up gate (valid only before 0.H.2
+  flipped the clusters to mTLS). Later sub-phases add their own gates.
 
 .PARAMETER Vars
   Array of "key=value" pairs forwarded to terraform as -var flags.
@@ -59,8 +59,8 @@ param(
     [ValidateSet('apply', 'destroy', 'smoke', 'cycle', 'plan', 'validate')]
     [string]$Verb,
 
-    [ValidateSet('0.H.1', '0.H.2')]
-    [string]$Phase = '0.H.2',
+    [ValidateSet('0.H.1', '0.H.2', '0.H.3')]
+    [string]$Phase = '0.H.3',
 
     [string[]]$Vars = @(),
 

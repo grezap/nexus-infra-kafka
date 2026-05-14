@@ -251,5 +251,99 @@ variable "vault_pki_ca_bundle_path" {
 variable "vault_pki_kafka_role_name" {
   type        = string
   default     = "kafka-broker"
-  description = "Name of the Vault PKI role under pki_int/ that issues broker leaf certs. Must match var.vault_pki_kafka_role_name in nexus-infra-vmware's security env."
+  description = "Name of the Vault PKI role under pki_int/ that issues leaf certs for the whole kafka tier (brokers + ecosystem). Must match var.vault_pki_kafka_role_name in nexus-infra-vmware's security env. (Role name is historical -- it predates the ecosystem nodes.)"
+}
+
+# ─── Phase 0.H.3 — Schema Registry HA pair + Confluent REST Proxy ─────────
+#
+# 3 ecosystem VMs: schema-registry-1/2 (HA pair, .91/.92) + kafka-rest-1
+# (.88). They are Kafka CLIENTS of the kafka-east cluster -- each gets its
+# own Vault-PKI keystore (the brokers require client certs) and serves its
+# own HTTPS listener. The PKI role + per-host AppRoles are owned by
+# nexus-infra-vmware's security env (extended to 9 kafka-node Vault Agents
+# in 0.H.3).
+
+variable "enable_schema_registry" {
+  type        = bool
+  default     = true
+  description = "Gate for the Schema Registry HA pair (schema-registry-1/2). Default true."
+}
+
+variable "enable_schema_registry_1" {
+  type    = bool
+  default = true
+}
+variable "enable_schema_registry_2" {
+  type    = bool
+  default = true
+}
+
+variable "enable_kafka_rest" {
+  type        = bool
+  default     = true
+  description = "Gate for the Confluent REST Proxy (kafka-rest-1). Default true."
+}
+
+variable "enable_kafka_rest_1" {
+  type    = bool
+  default = true
+}
+
+variable "enable_ecosystem_tls" {
+  type        = bool
+  default     = true
+  description = "role-overlay-ecosystem-tls.tf -- render a Vault-PKI PEM keystore/truststore on every enabled ecosystem node (schema-registry / kafka-rest now; kafka-connect / ksqldb / mm2 in 0.H.4-0.H.5). Default true."
+}
+
+variable "enable_schema_registry_config" {
+  type        = bool
+  default     = true
+  description = "role-overlay-schema-registry.tf -- render schema-registry.properties on the HA pair + enable/start schema-registry.service. Default true."
+}
+
+variable "enable_kafka_rest_config" {
+  type        = bool
+  default     = true
+  description = "role-overlay-rest.tf -- render kafka-rest.properties on kafka-rest-1 + enable/start kafka-rest.service. Default true."
+}
+
+variable "enable_schema_registry_1_vault_agent" {
+  type    = bool
+  default = true
+}
+variable "enable_schema_registry_2_vault_agent" {
+  type    = bool
+  default = true
+}
+variable "enable_kafka_rest_1_vault_agent" {
+  type    = bool
+  default = true
+}
+
+# MACs -- must match nexus-infra-vmware foundation env's dnsmasq dhcp-host
+# reservations (role-overlay-gateway-kafka-reservations.tf): :66/:67/:6E
+# primaries pin schema-registry-1/2 + kafka-rest-1 to .91/.92/.88.
+variable "mac_schema_registry_1_primary" {
+  type    = string
+  default = "00:50:56:3F:00:66"
+}
+variable "mac_schema_registry_1_secondary" {
+  type    = string
+  default = "00:50:56:3F:01:66"
+}
+variable "mac_schema_registry_2_primary" {
+  type    = string
+  default = "00:50:56:3F:00:67"
+}
+variable "mac_schema_registry_2_secondary" {
+  type    = string
+  default = "00:50:56:3F:01:67"
+}
+variable "mac_kafka_rest_1_primary" {
+  type    = string
+  default = "00:50:56:3F:00:6E"
+}
+variable "mac_kafka_rest_1_secondary" {
+  type    = string
+  default = "00:50:56:3F:01:6E"
 }

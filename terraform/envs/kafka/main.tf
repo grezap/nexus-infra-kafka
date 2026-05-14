@@ -143,4 +143,56 @@ module "kafka_west_3" {
 }
 
 # ─── Ecosystem VMs (schema-registry / connect / ksqldb / mm2 / rest) ──────
-# Added in 0.H.3-0.H.5. MAC range 00:50:56:3F:00:66-6E reserved for them.
+# MAC range 00:50:56:3F:00:66-6E (primaries) / :01:66-6E (secondaries).
+# 0.H.3 brings up the schema-registry pair + the REST proxy; 0.H.4 adds
+# kafka-connect + ksqldb, 0.H.5 adds mm2.
+
+# ─── Schema Registry HA pair (2) -- 0.H.3 ─────────────────────────────────
+module "schema_registry_1" {
+  source = "../../modules/vm"
+  count  = var.enable_kafka_cluster && var.enable_schema_registry && var.enable_schema_registry_1 ? 1 : 0
+
+  vm_name           = "schema-registry-1"
+  template_vmx_path = var.template_vmx_path
+  vm_output_dir     = "${var.vm_output_dir_root}/schema-registry-1"
+  vmrun_path        = var.vmrun_path
+
+  vnet        = var.vnet_primary
+  mac_address = var.mac_schema_registry_1_primary
+
+  vnet_secondary = var.vnet_secondary
+  mac_secondary  = var.mac_schema_registry_1_secondary
+}
+
+module "schema_registry_2" {
+  source = "../../modules/vm"
+  count  = var.enable_kafka_cluster && var.enable_schema_registry && var.enable_schema_registry_2 ? 1 : 0
+
+  vm_name           = "schema-registry-2"
+  template_vmx_path = var.template_vmx_path
+  vm_output_dir     = "${var.vm_output_dir_root}/schema-registry-2"
+  vmrun_path        = var.vmrun_path
+
+  vnet        = var.vnet_primary
+  mac_address = var.mac_schema_registry_2_primary
+
+  vnet_secondary = var.vnet_secondary
+  mac_secondary  = var.mac_schema_registry_2_secondary
+}
+
+# ─── Confluent REST Proxy (1) -- 0.H.3 ────────────────────────────────────
+module "kafka_rest_1" {
+  source = "../../modules/vm"
+  count  = var.enable_kafka_cluster && var.enable_kafka_rest && var.enable_kafka_rest_1 ? 1 : 0
+
+  vm_name           = "kafka-rest-1"
+  template_vmx_path = var.template_vmx_path
+  vm_output_dir     = "${var.vm_output_dir_root}/kafka-rest-1"
+  vmrun_path        = var.vmrun_path
+
+  vnet        = var.vnet_primary
+  mac_address = var.mac_kafka_rest_1_primary
+
+  vnet_secondary = var.vnet_secondary
+  mac_secondary  = var.mac_kafka_rest_1_secondary
+}

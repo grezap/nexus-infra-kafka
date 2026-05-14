@@ -137,16 +137,18 @@ resource "null_resource" "kafka_tls" {
   count = var.enable_kafka_cluster && var.enable_kafka_tls && var.enable_kafka_vault_agents ? 1 : 0
 
   triggers = {
-    # Re-run when any Vault Agent install changes (new agent = new node to
-    # enroll in mTLS).
-    va_ids = sha256(jsonencode([
-      for k, v in null_resource.kafka_vault_agent : v.id
-    ]))
-    # PKI role name pulled from the security env -- a security-side knob bump
-    # re-issues per-node certs.
+    # Re-run only when the broker SET changes (broker added/removed) or the
+    # PKI role / overlay version changes. Deliberately NOT keyed on the Vault
+    # Agent resource ids: those rotate on every security-env apply (secret-id
+    # rotation) but a rotation does NOT change the broker's cert, so keying on
+    # them would needlessly re-run the whole mTLS flip (= a cluster restart)
+    # on every cycle. Ordering is handled by depends_on; the
+    # kafka_vault_agent destroy provisioner is surgical, so 60-template-
+    # kafka-tls.hcl survives an agent re-install -- this overlay does not need
+    # to re-run to restore it.
     pki_role_name = var.vault_pki_kafka_role_name
     brokers       = jsonencode(local.kafka_enabled_brokers)
-    kafka_tls_v   = "2" # v2 = (a) kafka-tls-split.sh converts the Vault-PKI RSA key from PKCS#1 to PKCS#8 via `openssl pkcs8 -topk8` -- Kafka's Java PEM keystore parser rejects PKCS#1 with "InvalidKeyException: algid parse error" (Go-based Consul/Nomad never hit this); (b) Phase 2 restart does `systemctl reset-failed` first so a re-run after a start-limited prior attempt isn't blocked. v1 = original.
+    kafka_tls_v   = "3" # v3 (0.H.3) = dropped the `va_ids` trigger -- it re-ran the broker mTLS flip on every security-env re-apply (secret-id rotation churned the Vault Agent ids); paired with the kafka_vault_agent surgical-destroy fix so the TLS template survives agent re-installs. v2 = (a) kafka-tls-split.sh converts the Vault-PKI RSA key PKCS#1->PKCS#8 (`openssl pkcs8 -topk8`) -- Kafka's Java PEM parser rejects PKCS#1 with "InvalidKeyException: algid parse error"; (b) Phase 2 restart does `systemctl reset-failed` first. v1 = original.
 
     # Frozen for the destroy provisioner.
     destroy_broker_ips      = join(",", [for b in local.kafka_enabled_brokers : b.vmnet11])

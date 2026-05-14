@@ -9,6 +9,72 @@ blueprint — `nexus-platform-plan/MASTER-PLAN.md` line 160.
 
 ## [Unreleased]
 
+## 0.H.3 — Schema Registry HA pair + REST Proxy — 2026-05-14
+
+The first three ecosystem nodes are live: the Schema Registry HA pair
+(`schema-registry-1/2`) and the Confluent REST Proxy (`kafka-rest-1`).
+Each holds a per-node Vault-PKI keystore, connects to the `kafka-east`
+brokers over mutual TLS, and serves its own HTTPS listener. Smoke gate
+`scripts/smoke-0.H.3.ps1` is ALL GREEN (37 `[OK]` / 0 `[FAIL]`).
+Verification: `docs/verification/0.H.3-schema-registry-rest.md`.
+
+### Added
+
+- **3 ecosystem `module.vm` blocks** — `schema-registry-1/2` (.91/.92) +
+  `kafka-rest-1` (.88), with enable toggles + MACs matched to the
+  foundation env's dnsmasq reservations.
+- **`role-overlay-ecosystem-tls.tf`** — renders the Vault-PKI PEM
+  keystore/truststore + `client-ssl.properties` on every enabled
+  ecosystem node (the ecosystem-node analogue of
+  `role-overlay-kafka-tls.tf`'s Phase 1). Reused + extended by 0.H.4/0.H.5.
+- **`role-overlay-schema-registry.tf`** — pre-creates the `_schemas`
+  topic (1 partition / RF 3 / `cleanup.policy=compact` /
+  `min.insync.replicas=2`), renders `schema-registry.properties` per node
+  (`host.name` = VMnet10 IP), starts the Kafka-group-elected HA pair, and
+  HA-verifies (register on SR-1, fetch from SR-2). mTLS to the brokers;
+  HTTPS REST listener; `inter.instance.protocol=https`.
+- **`role-overlay-rest.tf`** — renders `kafka-rest.properties` (mTLS to
+  the brokers, HTTPS listener, `schema.registry.url` → the SR HA pair),
+  starts the REST Proxy, and `/topics`-verifies.
+- **`role-overlay-nftables-backplane.tf`** + **`role-overlay-kafka-vault-agents.tf`**
+  extended to the 3 ecosystem nodes; the Vault Agent overlay gained an
+  SSH + firstboot wait so it works on freshly-cloned nodes.
+- **`scripts/smoke-0.H.3.ps1`** — 10-section, 37-check ecosystem gate;
+  `scripts/kafka.ps1` default phase → `0.H.3`.
+- **`nexus-infra-vmware`** security env: the `kafka-broker` PKI role's
+  `allowed_domains` extended from the 6 brokers to all 15 kafka-tier
+  hostnames; +3 ecosystem policies + AppRoles + sidecars (9 kafka-node
+  Vault Agents total).
+
+### Design
+
+- Confluent 7.7.1's Jetty REST listeners accept `ssl.keystore.type=PEM`
+  (verified in the `rest-utils` source), so Schema Registry + REST Proxy
+  use the **same password-less PEM keystore** as the brokers — no JKS, no
+  `keytool`, no keystore password.
+- The SR/REST own HTTPS listeners are server-side TLS only
+  (`ssl.client.authentication=NONE`) — the consul-tls operator-API
+  precedent (`https.verify_incoming=false`). mTLS is mandatory only on the
+  data plane (the connection to the brokers).
+
+### Fixed
+
+- **0.H.2 re-apply churn** — `kafka_vault_agent`'s destroy did
+  `rm -rf /etc/vault-agent/` (wiping the TLS template the TLS overlays
+  own), and `kafka_tls`'s `va_ids` trigger re-ran the broker mTLS flip
+  whenever any Vault Agent id changed (every security-env apply rotates
+  secret-ids). Left unfixed, every 0.H.x apply cycle would needlessly
+  restart both broker clusters. Now: `kafka_vault_agent` destroy is
+  surgical (keeps the TLS template); `kafka_tls` + `kafka_ecosystem_tls`
+  dropped the `va_ids` trigger (re-run only on broker/node-set change).
+  (`kafka_tls_v` v3.)
+- **JSON-payload over-escaping** — the SR schema-register payload and two
+  REST Proxy payloads had `\"`-escaped *outer* quotes; corrected to plain
+  quotes (only the inner schema string is `\"`-escaped). Also: the
+  smoke gate's `_schemas` probe targeted `localhost:9092` from an SR node
+  (no broker there) and the REST round-trip produced to a non-existent
+  topic (brokers run `auto.create.topics.enable=false`) — both fixed.
+
 ## 0.H.2 — Broker mutual TLS — 2026-05-14
 
 Both KRaft clusters flipped from the 0.H.1 PLAINTEXT backplane to mutual

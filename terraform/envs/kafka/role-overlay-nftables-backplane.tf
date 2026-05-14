@@ -25,8 +25,7 @@
  */
 
 locals {
-  # Broker VMnet11 IPs (canon: vms.yaml lines 88-90). Only the brokers exist
-  # in 0.H.1; the ecosystem IPs join this list in 0.H.3.
+  # Broker VMnet11 IPs (canon: vms.yaml lines 88-90).
   kafka_broker_ips = compact([
     var.enable_kafka_east && var.enable_kafka_east_1 ? "192.168.70.21" : "",
     var.enable_kafka_east && var.enable_kafka_east_2 ? "192.168.70.22" : "",
@@ -35,6 +34,15 @@ locals {
     var.enable_kafka_west && var.enable_kafka_west_2 ? "192.168.70.25" : "",
     var.enable_kafka_west && var.enable_kafka_west_3 ? "192.168.70.26" : "",
   ])
+  # Ecosystem VMnet11 IPs -- the same kafka-node ruleset applies (whole-segment
+  # VMnet10 trust + operator ports). 0.H.3 adds the schema-registry pair + the
+  # REST proxy; 0.H.4/0.H.5 extend this list.
+  kafka_ecosystem_ips = compact([
+    var.enable_schema_registry && var.enable_schema_registry_1 ? "192.168.70.91" : "",
+    var.enable_schema_registry && var.enable_schema_registry_2 ? "192.168.70.92" : "",
+    var.enable_kafka_rest && var.enable_kafka_rest_1 ? "192.168.70.88" : "",
+  ])
+  kafka_node_ips     = concat(local.kafka_broker_ips, local.kafka_ecosystem_ips)
   nftables_conf_path = abspath("${path.module}/../../../packer/kafka-node/files/nftables.conf")
 }
 
@@ -48,20 +56,24 @@ resource "null_resource" "kafka_nftables_backplane" {
     west_1            = length(module.kafka_west_1) > 0 ? module.kafka_west_1[0].vm_name : "absent"
     west_2            = length(module.kafka_west_2) > 0 ? module.kafka_west_2[0].vm_name : "absent"
     west_3            = length(module.kafka_west_3) > 0 ? module.kafka_west_3[0].vm_name : "absent"
+    sr_1              = length(module.schema_registry_1) > 0 ? module.schema_registry_1[0].vm_name : "absent"
+    sr_2              = length(module.schema_registry_2) > 0 ? module.schema_registry_2[0].vm_name : "absent"
+    rest_1            = length(module.kafka_rest_1) > 0 ? module.kafka_rest_1[0].vm_name : "absent"
     nftables_conf_sha = filesha256(local.nftables_conf_path)
-    overlay_v         = "1"
+    overlay_v         = "2" # v2 (0.H.3) = pushes the ruleset to the ecosystem nodes too (schema-registry pair + REST proxy). v1 = 6 brokers only.
   }
 
   depends_on = [
     module.kafka_east_1, module.kafka_east_2, module.kafka_east_3,
     module.kafka_west_1, module.kafka_west_2, module.kafka_west_3,
+    module.schema_registry_1, module.schema_registry_2, module.kafka_rest_1,
   ]
 
   provisioner "local-exec" {
     when        = create
     interpreter = ["pwsh", "-NoProfile", "-Command"]
     command     = <<-PWSH
-      $ips     = @('${join("','", local.kafka_broker_ips)}')
+      $ips     = @('${join("','", local.kafka_node_ips)}')
       $user    = '${var.kafka_node_user}'
       $timeout = ${var.kafka_cluster_timeout_minutes}
       $confSrc = '${local.nftables_conf_path}'
@@ -98,7 +110,7 @@ resource "null_resource" "kafka_nftables_backplane" {
         Write-Host "[nftables] $${ip}: ruleset applied"
       }
 
-      Write-Host "[nftables] all $($ips.Count) broker(s) converged on the kafka-node ruleset"
+      Write-Host "[nftables] all $($ips.Count) kafka-node(s) converged on the kafka-node ruleset"
     PWSH
   }
 }
