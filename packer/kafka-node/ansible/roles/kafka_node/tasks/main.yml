@@ -1,0 +1,195 @@
+---
+# kafka_node role -- install Temurin JDK, Apache Kafka, Confluent Community,
+# the firstboot script, and systemd units (all role units DISABLED -- the
+# Terraform role-overlays enable exactly one per node). Runs after the four
+# shared nexus_* roles inside the kafka-node Packer template.
+
+# ─── Temurin JDK (Adoptium apt repo) ──────────────────────────────────────
+- name: Install prerequisites for the Adoptium apt repo
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+    state: present
+    update_cache: true
+
+- name: Create /etc/apt/keyrings (modern apt key location)
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Download Adoptium GPG key
+  ansible.builtin.shell: |
+    set -euo pipefail
+    curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public \
+      | gpg --dearmor -o /etc/apt/keyrings/adoptium.gpg
+    chmod 644 /etc/apt/keyrings/adoptium.gpg
+  args:
+    creates: /etc/apt/keyrings/adoptium.gpg
+
+- name: Detect Debian codename
+  ansible.builtin.command: lsb_release -cs
+  register: kafka_node_debian_codename
+  changed_when: false
+
+- name: Add Adoptium apt repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/adoptium.list
+    content: >
+      deb [arch=amd64 signed-by=/etc/apt/keyrings/adoptium.gpg]
+      https://packages.adoptium.net/artifactory/deb
+      {{ kafka_node_debian_codename.stdout }} {{ kafka_node_jdk_apt_channel }}
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Install Temurin JDK
+  ansible.builtin.apt:
+    name: "temurin-{{ kafka_node_jdk_major }}-jdk"
+    state: present
+    update_cache: true
+
+# ─── kafka system account ─────────────────────────────────────────────────
+- name: Create kafka group
+  ansible.builtin.group:
+    name: "{{ kafka_node_group }}"
+    system: true
+    state: present
+
+- name: Create kafka user
+  ansible.builtin.user:
+    name: "{{ kafka_node_user }}"
+    group: "{{ kafka_node_group }}"
+    system: true
+    shell: /usr/sbin/nologin
+    home: "{{ kafka_node_kafka_home }}"
+    create_home: false
+    state: present
+
+- name: Create Kafka directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    # config dir is root:kafka 0750 -- Terraform overlays write here as root,
+    # services read as kafka. Same pattern as /etc/consul.d in swarm-node.
+    - { path: "{{ kafka_node_config_dir }}", owner: root, group: "{{ kafka_node_group }}", mode: '0750' }
+    - { path: "{{ kafka_node_data_dir }}", owner: "{{ kafka_node_user }}", group: "{{ kafka_node_group }}", mode: '0700' }
+    - { path: "{{ kafka_node_log_dir }}", owner: "{{ kafka_node_user }}", group: "{{ kafka_node_group }}", mode: '0750' }
+    - { path: "{{ kafka_node_config_dir }}/tls", owner: root, group: "{{ kafka_node_group }}", mode: '0750' }
+
+# ─── Apache Kafka 3.8.x (brokers + connect-mirror-maker for MM2) ───────────
+- name: Download + verify + extract Apache Kafka
+  ansible.builtin.shell: |
+    set -euo pipefail
+    cd /tmp
+    tgz="{{ kafka_node_kafka_tgz }}"
+    curl -fsSL "{{ kafka_node_kafka_url }}"        -o "${tgz}"
+    curl -fsSL "{{ kafka_node_kafka_url }}.sha512" -o "${tgz}.sha512"
+    # Apache publishes the .sha512 as "<hash>  <filename>" or "<filename>: <hash>";
+    # normalise to the coreutils-checkable form and verify.
+    if grep -q ':' "${tgz}.sha512"; then
+      awk -F': ' '{gsub(/ /,"",$2); print $2"  "$1}' "${tgz}.sha512" | sha512sum -c -
+    else
+      sha512sum -c "${tgz}.sha512"
+    fi
+    mkdir -p "{{ kafka_node_kafka_home }}"
+    tar -xzf "${tgz}" -C "{{ kafka_node_kafka_home }}" --strip-components=1
+    rm -f "${tgz}" "${tgz}.sha512"
+  args:
+    creates: "{{ kafka_node_kafka_home }}/bin/kafka-server-start.sh"
+
+# ─── Confluent Community 7.7.x (SR / Connect / ksqlDB / REST Proxy) ────────
+# Baked now so the template is cold-rebuild-complete; consumed from 0.H.3.
+- name: Download + extract Confluent Community
+  ansible.builtin.shell: |
+    set -euo pipefail
+    cd /tmp
+    tgz="{{ kafka_node_confluent_tgz }}"
+    curl -fsSL "{{ kafka_node_confluent_url }}" -o "${tgz}"
+    mkdir -p "{{ kafka_node_confluent_home }}"
+    # Confluent Community tarball extracts as confluent-<version>/...
+    tar -xzf "${tgz}" -C "{{ kafka_node_confluent_home }}" --strip-components=1
+    rm -f "${tgz}"
+  args:
+    creates: "{{ kafka_node_confluent_home }}/bin/schema-registry-start"
+
+- name: Set ownership on Kafka + Confluent install roots
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ kafka_node_user }}"
+    group: "{{ kafka_node_group }}"
+    recurse: true
+  loop:
+    - "{{ kafka_node_kafka_home }}"
+    - "{{ kafka_node_confluent_home }}"
+
+# ─── Systemd units (all role units DISABLED -- overlays enable one) ───────
+- name: Install role systemd units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop:
+    - kafka.service
+    - schema-registry.service
+    - connect-distributed.service
+    - ksqldb-server.service
+    - kafka-rest.service
+    - mm2.service
+  notify: Reload systemd
+
+# ─── Firstboot ────────────────────────────────────────────────────────────
+- name: Install kafka-node-firstboot.sh
+  ansible.builtin.copy:
+    src: kafka-node-firstboot.sh
+    dest: /usr/local/sbin/kafka-node-firstboot.sh
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Install kafka-node-firstboot.service systemd unit
+  ansible.builtin.template:
+    src: kafka-node-firstboot.service.j2
+    dest: /etc/systemd/system/kafka-node-firstboot.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload systemd
+
+- name: Enable kafka-node-firstboot service (runs once on first clone boot)
+  ansible.builtin.systemd:
+    name: kafka-node-firstboot.service
+    enabled: true
+    daemon_reload: true
+
+# Role services (kafka / schema-registry / connect / ksqldb / rest / mm2) are
+# enabled BY the Terraform role-overlays after config rendering -- the template
+# has no IP/role/cluster-UUID yet.
+
+- name: Verify Java + Kafka tooling
+  ansible.builtin.command: "{{ item }}"
+  changed_when: false
+  loop:
+    - java -version
+    - "{{ kafka_node_kafka_home }}/bin/kafka-topics.sh --version"
+  register: kafka_node_verify
+
+- name: Show installed versions
+  ansible.builtin.debug:
+    msg:
+      - "JDK:       Temurin {{ kafka_node_jdk_major }}"
+      - "Kafka:     {{ kafka_node_kafka_version }} (scala {{ kafka_node_kafka_scala_version }})"
+      - "Confluent: Community {{ kafka_node_confluent_version }}"

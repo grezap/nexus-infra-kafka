@@ -1,0 +1,28 @@
+[Unit]
+Description=Kafka Connect (distributed) + Debezium
+Documentation=https://docs.confluent.io/platform/current/connect/
+After=network-online.target kafka-node-firstboot.service
+Wants=network-online.target
+Requires=kafka-node-firstboot.service
+# Delivered DISABLED. role-overlay-connect.tf (0.H.4) renders
+# {{ kafka_node_config_dir }}/connect-distributed.properties + the Debezium
+# plugin path, then enables + starts.
+ConditionPathExists={{ kafka_node_config_dir }}/connect-distributed.properties
+
+[Service]
+Type=simple
+User={{ kafka_node_user }}
+Group={{ kafka_node_group }}
+EnvironmentFile=-/etc/nexus-kafka/node-identity.env
+EnvironmentFile=-/etc/nexus-kafka/connect.env
+ExecStart={{ kafka_node_confluent_home }}/bin/connect-distributed {{ kafka_node_config_dir }}/connect-distributed.properties
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=15
+StartLimitIntervalSec=600
+LimitNOFILE=1048576
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

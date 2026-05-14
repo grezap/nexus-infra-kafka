@@ -1,0 +1,27 @@
+[Unit]
+Description=Confluent REST Proxy
+Documentation=https://docs.confluent.io/platform/current/kafka-rest/
+After=network-online.target kafka-node-firstboot.service
+Wants=network-online.target
+Requires=kafka-node-firstboot.service
+# Delivered DISABLED. role-overlay-rest.tf (0.H.3) renders
+# {{ kafka_node_config_dir }}/kafka-rest.properties then enables + starts.
+ConditionPathExists={{ kafka_node_config_dir }}/kafka-rest.properties
+
+[Service]
+Type=simple
+User={{ kafka_node_user }}
+Group={{ kafka_node_group }}
+EnvironmentFile=-/etc/nexus-kafka/node-identity.env
+EnvironmentFile=-/etc/nexus-kafka/kafka-rest.env
+ExecStart={{ kafka_node_confluent_home }}/bin/kafka-rest-start {{ kafka_node_config_dir }}/kafka-rest.properties
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=15
+StartLimitIntervalSec=600
+LimitNOFILE=1048576
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

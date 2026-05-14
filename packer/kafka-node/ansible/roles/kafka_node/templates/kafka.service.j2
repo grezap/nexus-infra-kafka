@@ -1,0 +1,33 @@
+[Unit]
+Description=Apache Kafka (KRaft broker + controller)
+Documentation=https://kafka.apache.org/documentation/
+After=network-online.target kafka-node-firstboot.service
+Wants=network-online.target
+Requires=kafka-node-firstboot.service
+# Delivered DISABLED by the kafka_node Packer role. role-overlay-broker-config.tf
+# renders {{ kafka_node_config_dir }}/server.properties, runs kafka-storage
+# format, then enables + starts this unit.
+ConditionPathExists={{ kafka_node_config_dir }}/server.properties
+
+[Service]
+Type=simple
+User={{ kafka_node_user }}
+Group={{ kafka_node_group }}
+EnvironmentFile=-/etc/nexus-kafka/node-identity.env
+EnvironmentFile=-/etc/nexus-kafka/kafka.env
+ExecStart={{ kafka_node_kafka_home }}/bin/kafka-server-start.sh {{ kafka_node_config_dir }}/server.properties
+ExecStop={{ kafka_node_kafka_home }}/bin/kafka-server-stop.sh
+Restart=on-failure
+RestartSec=10
+# KRaft controllers race each other at cluster boot (quorum needs peers up
+# together). Generous StartLimit so a slow-to-boot peer doesn't make systemd
+# give up -- mirrors the vault-transit-boot-race lesson
+# (memory/feedback_vault_transit_boot_race_recovery.md).
+StartLimitBurst=15
+StartLimitIntervalSec=600
+LimitNOFILE=1048576
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

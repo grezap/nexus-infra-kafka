@@ -1,0 +1,27 @@
+[Unit]
+Description=ksqlDB Server
+Documentation=https://docs.ksqldb.io/
+After=network-online.target kafka-node-firstboot.service
+Wants=network-online.target
+Requires=kafka-node-firstboot.service
+# Delivered DISABLED. role-overlay-ksqldb.tf (0.H.4) renders
+# {{ kafka_node_config_dir }}/ksqldb-server.properties then enables + starts.
+ConditionPathExists={{ kafka_node_config_dir }}/ksqldb-server.properties
+
+[Service]
+Type=simple
+User={{ kafka_node_user }}
+Group={{ kafka_node_group }}
+EnvironmentFile=-/etc/nexus-kafka/node-identity.env
+EnvironmentFile=-/etc/nexus-kafka/ksqldb.env
+ExecStart={{ kafka_node_confluent_home }}/bin/ksql-server-start {{ kafka_node_config_dir }}/ksqldb-server.properties
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=15
+StartLimitIntervalSec=600
+LimitNOFILE=1048576
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

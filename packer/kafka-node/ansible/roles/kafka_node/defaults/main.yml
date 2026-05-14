@@ -1,0 +1,31 @@
+---
+# kafka_node role defaults
+
+kafka_node_jdk_apt_channel: main
+kafka_node_jdk_major: 21
+kafka_node_kafka_version: "3.8.1"
+kafka_node_kafka_scala_version: "2.13"
+kafka_node_confluent_version: "7.7.1"
+
+# System account every Kafka-family service runs as.
+kafka_node_user: kafka
+kafka_node_group: kafka
+
+# Install roots.
+kafka_node_kafka_home: /opt/kafka
+kafka_node_confluent_home: /opt/confluent
+
+# Per-node config + data + log dirs (config rendered by Terraform role-overlays).
+kafka_node_config_dir: /etc/nexus-kafka
+kafka_node_data_dir: /var/lib/kafka
+kafka_node_log_dir: /var/log/kafka
+
+# Apache Kafka tarball lives on archive.apache.org (stable, checksummed).
+kafka_node_kafka_tgz: "kafka_{{ kafka_node_kafka_scala_version }}-{{ kafka_node_kafka_version }}.tgz"
+kafka_node_kafka_url: "https://archive.apache.org/dist/kafka/{{ kafka_node_kafka_version }}/{{ kafka_node_kafka_tgz }}"
+
+# Confluent Community tarball lives on packages.confluent.io.
+# major.minor is derived from the full version (7.7.1 -> 7.7).
+kafka_node_confluent_minor: "{{ kafka_node_confluent_version.split('.')[0] }}.{{ kafka_node_confluent_version.split('.')[1] }}"
+kafka_node_confluent_tgz: "confluent-community-{{ kafka_node_confluent_version }}.tar.gz"
+kafka_node_confluent_url: "https://packages.confluent.io/archive/{{ kafka_node_confluent_minor }}/{{ kafka_node_confluent_tgz }}"

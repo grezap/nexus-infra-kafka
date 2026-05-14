@@ -1,0 +1,27 @@
+[Unit]
+Description=Confluent Schema Registry
+Documentation=https://docs.confluent.io/platform/current/schema-registry/
+After=network-online.target kafka-node-firstboot.service
+Wants=network-online.target
+Requires=kafka-node-firstboot.service
+# Delivered DISABLED. role-overlay-schema-registry.tf (0.H.3) renders
+# {{ kafka_node_config_dir }}/schema-registry.properties then enables + starts.
+ConditionPathExists={{ kafka_node_config_dir }}/schema-registry.properties
+
+[Service]
+Type=simple
+User={{ kafka_node_user }}
+Group={{ kafka_node_group }}
+EnvironmentFile=-/etc/nexus-kafka/node-identity.env
+EnvironmentFile=-/etc/nexus-kafka/schema-registry.env
+ExecStart={{ kafka_node_confluent_home }}/bin/schema-registry-start {{ kafka_node_config_dir }}/schema-registry.properties
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=15
+StartLimitIntervalSec=600
+LimitNOFILE=1048576
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

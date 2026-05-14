@@ -1,0 +1,29 @@
+[Unit]
+Description=Kafka MirrorMaker 2 (cross-cluster DR replication)
+Documentation=https://kafka.apache.org/documentation/#georeplication
+After=network-online.target kafka-node-firstboot.service
+Wants=network-online.target
+Requires=kafka-node-firstboot.service
+# Delivered DISABLED. role-overlay-mm2.tf (0.H.5) renders
+# {{ kafka_node_config_dir }}/mm2.properties (mm2-1 east->west, mm2-2
+# west->east) then enables + starts. MM2 ships inside Apache Kafka as
+# connect-mirror-maker -- no Confluent component needed.
+ConditionPathExists={{ kafka_node_config_dir }}/mm2.properties
+
+[Service]
+Type=simple
+User={{ kafka_node_user }}
+Group={{ kafka_node_group }}
+EnvironmentFile=-/etc/nexus-kafka/node-identity.env
+EnvironmentFile=-/etc/nexus-kafka/mm2.env
+ExecStart={{ kafka_node_kafka_home }}/bin/connect-mirror-maker.sh {{ kafka_node_config_dir }}/mm2.properties
+Restart=on-failure
+RestartSec=10
+StartLimitBurst=15
+StartLimitIntervalSec=600
+LimitNOFILE=1048576
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

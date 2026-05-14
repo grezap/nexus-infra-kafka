@@ -1,0 +1,18 @@
+[Unit]
+Description=kafka-node firstboot (NIC discovery, hostname mapping, VMnet10 backplane, node-identity env)
+After=systemd-networkd.service network-online.target
+Wants=network-online.target
+# No Before= for the role services -- firstboot does NOT enable any Kafka
+# service (KRaft formatting needs a Terraform-time cluster UUID). The
+# role-overlays enable exactly one role service per node post-apply.
+ConditionPathExists=!/var/lib/kafka-node-firstboot-done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/kafka-node-firstboot.sh
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
