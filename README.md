@@ -7,6 +7,8 @@ under VMware Workstation Pro.
 
 > **Canon:** This repo implements [Phase 0.H](https://github.com/grezap/nexus-platform-plan/blob/main/MASTER-PLAN.md) (line 160) of the NexusPlatform blueprint. VM inventory is `nexus-platform-plan/docs/infra/vms.yaml` lines 84-112. Read [`nexus-platform-plan`](https://github.com/grezap/nexus-platform-plan) for the architectural source of truth.
 >
+> **➜ Want to rebuild the Kafka tier from zero?** [`docs/handbook.md`](./docs/handbook.md) is the operator canon — §0 prerequisites (foundation + security tiers alive, gateway dnsmasq has the 15 Kafka MAC reservations, security env has written the 15 AppRole sidecars), §1.1 Packer build, §1.2 cross-env operator order (security FIRST, then kafka — hard ordering), §1.3 apply with numbered apply-flow breakdown, §1.4 verify, §1.5 selective-ops `-Vars` examples, §1.6 destroy, §3.1 cold-rebuild canon (proven 2026-05-15), §3.7 apply-time VM-layer recovery. Cross-tier index: [`nexus-platform-plan/docs/setup-guides.md`](https://github.com/grezap/nexus-platform-plan/blob/main/docs/setup-guides.md).
+>
 > **Phase exit gate:** produce a record to a topic on `kafka-east` → it appears on the mirrored topic on `kafka-west` via MirrorMaker 2.
 
 ## The 15 VMs (`03-kafka` tier)
