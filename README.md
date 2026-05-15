@@ -1,5 +1,12 @@
 # nexus-infra-kafka
 
+[![Packer](https://img.shields.io/badge/Packer-1.11+-blue)](https://www.packer.io/)
+[![Terraform](https://img.shields.io/badge/Terraform-1.9+-purple)](https://www.terraform.io/)
+[![License](https://img.shields.io/badge/license-MIT-green)](./LICENSE)
+[![Blueprint](https://img.shields.io/badge/blueprint-nexus--platform--plan%20v0.1.3-orange)](https://github.com/grezap/nexus-platform-plan)
+[![Phase](https://img.shields.io/badge/phase-0.H%20complete%20%E2%80%A2%20cold--rebuildable-brightgreen)](./CHANGELOG.md)
+[![Release](https://img.shields.io/badge/release-v0.1.0-blue)](https://github.com/grezap/nexus-infra-kafka/releases/tag/v0.1.0)
+
 Tier-3 of the **NexusPlatform 66-VM lab** — the Kafka ecosystem. Two
 KRaft clusters (East primary + West DR), Schema Registry, Kafka Connect +
 Debezium, ksqlDB, MirrorMaker 2, and a REST Proxy, all on Debian 13 VMs
