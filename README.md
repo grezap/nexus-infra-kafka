@@ -7,7 +7,7 @@
 [![Phase](https://img.shields.io/badge/phase-0.H%20complete%20%E2%80%A2%20cold--rebuildable-brightgreen)](./CHANGELOG.md)
 [![Release](https://img.shields.io/badge/release-v0.1.0-blue)](https://github.com/grezap/nexus-infra-kafka/releases/tag/v0.1.0)
 
-Tier-3 of the **NexusPlatform 66-VM lab** — the Kafka ecosystem. Two
+Tier-3 of the **NexusPlatform lab** (88 VMs built through Phase 0.L.4) — the Kafka ecosystem. Two
 KRaft clusters (East primary + West DR), Schema Registry, Kafka Connect +
 Debezium, ksqlDB, MirrorMaker 2, and a REST Proxy, all on Debian 13 VMs
 under VMware Workstation Pro.
