@@ -181,6 +181,7 @@ Vault-side state (PKI role, AppRoles, sidecars) stays — it is owned by the
 | 0.H.4 | Kafka Connect distributed cluster + Debezium + ksqlDB cluster | ✅ closed (2026-05-14) — `smoke-0.H.4.ps1` 48/48 |
 | 0.H.5 | MirrorMaker 2 cross-cluster DR pair + the Phase 0.H exit gate | ✅ closed (2026-05-14) — `smoke-0.H.5.ps1` 38/38 |
 | 0.H.6 | Close-out canon batch (MASTER-PLAN sub-phase rows + ADRs 0020-0023 + `vms.yaml` + `glossary.md` + this handbook) + cold-rebuild proof | ✅ closed (`v0.1.0`, 2026-05-15) — **Phase 0.H complete** |
+| 0.H.7 | KRaft `StandardAuthorizer` enable (`role-overlay-kafka-acl-authorizer.tf`, `super.users` = all 15 tier principals, rolling restart) so the `nexus acl kafka-east\|kafka-west` verb enforces — for **nexus-cli v0.6.7** | ✅ live-applied (2026-06-15); cold-rebuild proof ⏳ pending |
 
 **Phase 0.H exit gate:** produce a record to `kafka-east` → it appears on the
 mirrored `east.*` topic on `kafka-west` via MirrorMaker 2 (and the `west.*`

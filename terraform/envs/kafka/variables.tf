@@ -32,8 +32,8 @@ variable "template_vmx_path" {
 
 variable "vmrun_path" {
   type        = string
-  default     = "C:/Program Files (x86)/VMware/VMware Workstation/vmrun.exe"
-  description = "Absolute path to vmrun.exe."
+  default     = "C:/Program Files/VMware/VMware Workstation/vmrun.exe"
+  description = "Absolute path to vmrun.exe. NOTE: the canonical install is the non-(x86) Program Files path since the VMware Workstation upgrade (feedback_vmrun_path_moved_nonx86); the old x86 default left a stale path baked into clone_vm state that breaks a from-zero apply. Fixed for the v0.6.7 cold-rebuild."
 }
 
 variable "vm_output_dir_root" {
@@ -228,6 +228,12 @@ variable "enable_kafka_tls" {
   type        = bool
   default     = true
   description = "role-overlay-kafka-tls.tf -- flip both KRaft clusters from PLAINTEXT (0.H.1) to mutual TLS (per-node Vault PKI leaf certs, ssl.client.auth=required, per-cluster parallel big-bang restart). Default true. Set false to keep the clusters on PLAINTEXT/9092 (0.H.1 steady state)."
+}
+
+variable "enable_kafka_acl_authorizer" {
+  type        = bool
+  default     = true
+  description = "role-overlay-kafka-acl-authorizer.tf (Phase 0.H.7) -- enable the KRaft-native StandardAuthorizer on both clusters so the `nexus acl kafka-east|kafka-west` verb enforces (deny-by-default + super.users = all 15 platform principals). Layered on top of enable_kafka_tls; per-cluster ROLLING restart. Default true. Set false to leave the brokers authorizer-less (implicit-allow, the 0.H.1-0.H.6 steady state)."
 }
 
 variable "vault_agent_version" {

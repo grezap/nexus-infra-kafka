@@ -9,6 +9,30 @@ blueprint — `nexus-platform-plan/MASTER-PLAN.md` line 160.
 
 ## [Unreleased]
 
+### Added — Phase 0.H.7: KRaft ACL authorizer (for nexus-cli v0.6.7)
+
+- **`terraform/envs/kafka/role-overlay-kafka-acl-authorizer.tf`** *(new)* — enables the KRaft-native
+  `org.apache.kafka.metadata.authorizer.StandardAuthorizer` on both clusters so the `nexus acl
+  kafka-east|kafka-west` verb actually enforces (before this, the brokers carried no
+  `authorizer.class.name` and every principal had implicit full access). Idempotently appends
+  `authorizer.class.name` + `super.users` + `allow.everyone.if.no.acl.found=false` to each broker's
+  `server.properties` (`depends_on null_resource.kafka_tls`), then **rolling-restarts** per cluster
+  (followers first, leader last — NOT a big-bang, since the SSL listeners are unchanged so the quorum
+  keeps a leader throughout), and verifies `kafka-acls --list` works. Gated by
+  `var.enable_kafka_acl_authorizer` (default true); a destroy provisioner strips the stanza + restarts.
+- **`super.users` = all 15 tier principals** (6 brokers + 9 ecosystem nodes, `User:CN=<host>.kafka.nexus.lab`),
+  on both clusters. Every node that connects to a broker authenticates with its own Vault-PKI client cert;
+  the ecosystem services (Schema Registry, REST, Connect, ksqlDB, MirrorMaker 2) are Kafka clients, so
+  omitting their principals would deny-by-default break the running platform. Ordinary application
+  principals stay deny-by-default — which is what makes `acl grant` meaningful. Validated on a single
+  follower canary (east-3) before the full roll.
+
+### Changed
+
+- **`terraform/envs/kafka/variables.tf`** — fixed the `vmrun_path` default from the stale
+  `C:/Program Files (x86)/...` to the canonical non-(x86) path (the `feedback_vmrun_path_moved_nonx86`
+  trap) so a from-zero cold rebuild clones with the correct path.
+
 ## 0.H.6 — Close-out canon batch + cold-rebuild proof — 2026-05-15
 
 Phase 0.H close-out. The canon artefacts are ratified, the tier is proven
