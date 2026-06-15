@@ -139,15 +139,20 @@ ${local.kafka_acl_block}
         $hostName = "kafka-$($b.cluster)-$($b.node_id)"
         $ip       = $b.vmnet11
         Write-Host "[kafka-acl $hostName] appending StandardAuthorizer stanza to server.properties"
+        # NOTE: literal path inlined (no bash `F=` var) -- a `\$F` in a PowerShell
+        # here-string does NOT escape the `$` (backslash is not the PS escape
+        # char; backtick is), so `$F` would PS-interpolate to empty and break
+        # `cp`/`sed`. Inlining the path sidesteps the whole bash-$-in-PS-heredoc
+        # trap (feedback_terraform_heredoc_powershell). Surfaced by the v0.6.7
+        # cold-rebuild (the live enable used a separate bash path).
         $stage = @"
 set -euo pipefail
-F=/etc/nexus-kafka/server.properties
-sudo test -f \$F.pre-acl || sudo cp \$F \$F.pre-acl
+sudo test -f /etc/nexus-kafka/server.properties.pre-acl || sudo cp /etc/nexus-kafka/server.properties /etc/nexus-kafka/server.properties.pre-acl
 # Idempotent: strip any prior authorizer block + its scalar keys, then append.
-sudo sed -i '/^# --- Phase 0.H.7 ACL authorizer/d;/^authorizer.class.name=/d;/^super.users=/d;/^allow.everyone.if.no.acl.found=/d' \$F
-echo '$aclB64' | base64 -d | sudo tee -a \$F > /dev/null
-sudo chown root:kafka \$F
-sudo chmod 0640 \$F
+sudo sed -i '/^# --- Phase 0.H.7 ACL authorizer/d;/^authorizer.class.name=/d;/^super.users=/d;/^allow.everyone.if.no.acl.found=/d' /etc/nexus-kafka/server.properties
+echo '$aclB64' | base64 -d | sudo tee -a /etc/nexus-kafka/server.properties > /dev/null
+sudo chown root:kafka /etc/nexus-kafka/server.properties
+sudo chmod 0640 /etc/nexus-kafka/server.properties
 echo STAGE_OK
 "@
         $out = ($stage -replace "`r`n","`n") | ssh @sshOpts "$sshUser@$ip" "tr -d '\r' | bash -s" 2>&1 | Out-String
@@ -227,10 +232,11 @@ echo STAGE_OK
         $parts = $rec -split ':'
         $ip = $parts[2]
         Write-Host "[kafka-acl destroy] $${ip}: removing authorizer stanza + restarting kafka.service"
+        # literal path inlined -- see the create-provisioner note on the
+        # \$F-in-PS-heredoc trap.
         $remote = @"
 set -euo pipefail
-F=/etc/nexus-kafka/server.properties
-sudo sed -i '/^# --- Phase 0.H.7 ACL authorizer/d;/^authorizer.class.name=/d;/^super.users=/d;/^allow.everyone.if.no.acl.found=/d' \$F
+sudo sed -i '/^# --- Phase 0.H.7 ACL authorizer/d;/^authorizer.class.name=/d;/^super.users=/d;/^allow.everyone.if.no.acl.found=/d' /etc/nexus-kafka/server.properties
 sudo systemctl reset-failed kafka.service 2>/dev/null || true
 sudo systemctl restart kafka.service
 "@
