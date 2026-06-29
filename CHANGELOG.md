@@ -9,6 +9,27 @@ blueprint — `nexus-platform-plan/MASTER-PLAN.md` line 160.
 
 ## [Unreleased]
 
+### Changed — Platform CA rollover: the full kafka tier cold-rebuilt to the new Vault PKI root (2026-06-29)
+
+- **The entire 15-VM kafka tier (kafka-east ×3 + kafka-west ×3 + ecosystem ×9: schema-registry ×2,
+  kafka-connect ×2, kafka-rest ×1, ksqldb ×2, mm2 ×2) cold-rebuilt onto the v0.8.1-greenfield Vault root**
+  as the third tier of the paced platform CA rollover (kafka was left OLD-root because it was offline during
+  the 2026-06-18/19 Vault greenfield). No source `.tf` changed — env + module + clone_vm-state `vmrun_path`
+  were already non-x86 (baked in the v0.6.7 cold-rebuild), and kafka is **mTLS-only** (no Vault-KV operator
+  password) so there is **no cred-drift to reconcile** (the citus/Patroni hazard does not apply). Pre-flight:
+  all **15 per-node AppRole sidecars** verified to AppRole-login against the current root before the rebuild.
+- **Operation:** `kafka.ps1 destroy` (72 destroyed, clean — no zombies) → `apply` with
+  `TF_CLI_ARGS_apply=-parallelism=3` (72 added, **zero transients**) → **`smoke-0.H.5` ALL PASSED** (MM2 DR
+  pair live; per-cluster mTLS keystores/truststores rendered from the **new-root** `kafka-broker` PKI role;
+  heartbeats + MM2 internal topics on both targets; bidirectional produce→mirror→consume round-trip).
+- **CA-rollover proof — `nexus cert-rotate kafka` GREEN** (all 6 brokers east+west, fresh leaf serials,
+  0 errors, ~88s): this **closes the v0.8.6-flagged refusal** — the `kafka` meta-adapter delegated the
+  rotation to the two `KafkaClusterAdapter`s, which previously **x509-refused** (broker could not verify the
+  new-root Vault PKI to issue a leaf while the tier was old-root) and now **succeed post-rebuild**. Verb
+  matrix re-run GREEN: `status` (6 controllers, both quorum leaders) / `health` (both regions 3/3 voters,
+  0 under-replicated, 0 offline) / `topology` (+ the MM2 DR link) / `backup take` (east||west merge, 2
+  records each) / `acl list` (empty — fresh StandardAuthorizer, no custom ACLs).
+
 ### Added — Phase 0.H.7: KRaft ACL authorizer (for nexus-cli v0.6.7)
 
 - **`terraform/envs/kafka/role-overlay-kafka-acl-authorizer.tf`** *(new)* — enables the KRaft-native
